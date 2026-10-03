@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shop TFM - AI Construction Tracker v2.0</title>
+  <!-- Google Fonts: Prompt & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Prompt', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    code, pre { font-family: 'JetBrains Mono', monospace; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-white font-bold text-xl">
+          🏗️
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-base tracking-tight text-white">SHOP TFM</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-semibold">
+              AI TRACKER v2.0
+            </span>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            Google Sheets Database & Google Apps Script
+          </div>
+        </div>
+      </div>
+
+      <!-- Nav Tabs -->
+      <nav class="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800 text-xs">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3 py-1.5 rounded-lg font-medium transition-all bg-cyan-600 text-white shadow-md">
+          Dashboard ภาพรวม
+        </button>
+        <button onclick="switchTab('upload')" id="nav-upload" class="px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-slate-200">
+          AI Upload
+        </button>
+        <button onclick="switchTab('queue')" id="nav-queue" class="px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-slate-200">
+          คิวอนุมัติ AI <span id="queue-badge" class="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold">1</span>
+        </button>
+        <button onclick="switchTab('settings')" id="nav-settings" class="px-3 py-1.5 rounded-lg font-medium transition-all text-slate-400 hover:text-slate-200">
+          ตั้งค่าระบบ (Admin Only)
+        </button>
+      </nav>
+
+      <!-- Role Switcher -->
+      <div class="flex items-center gap-2 bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs">
+        <button onclick="setRole('CONTRACTOR')" id="role-contractor" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200">
+          ผู้รับเหมา
+        </button>
+        <button onclick="setRole('SUPERVISOR')" id="role-supervisor" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-200">
+          ผู้ควบคุมงาน
+        </button>
+        <button onclick="openAdminAuth()" id="role-admin" class="px-2.5 py-1 rounded-lg bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 font-semibold">
+          Admin
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- TAB 1: DASHBOARD -->
+    <div id="tab-dashboard" class="space-y-6">
+      <!-- Project Filter Bar -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-lg backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-2 text-sm font-semibold text-slate-200">
+          <span class="p-1.5 rounded-lg bg-cyan-950 text-cyan-400 border border-cyan-800">🔍</span>
+          <span>ตัวกรองโครงการ:</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <select id="filter-branch" onchange="renderDashboard()" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 focus:border-cyan-500">
+            <option value="ALL">ทุกสาขา</option>
+            <option value="สาขา สยามสแควร์" selected>สาขา สยามสแควร์</option>
+            <option value="สาขา เชียงใหม่ นิมมาน">สาขา เชียงใหม่ นิมมาน</option>
+            <option value="สาขา ภูเก็ต ป่าตอง">สาขา ภูเก็ต ป่าตอง</option>
+            <option value="สาขา ขอนแก่น มิตรอารีย์">สาขา ขอนแก่น มิตรอารีย์</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Hero Mascot & Key Metrics -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <div class="lg:col-span-8 space-y-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="px-2.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800 text-xs font-mono font-bold" id="dash-id">
+              TFM-2026-001
+            </span>
+            <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700" id="dash-province">
+              กรุงเทพฯ
+            </span>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800" id="dash-status-badge">
+              อนุมัติแล้ว
+            </span>
+          </div>
+          <h2 class="text-2xl font-bold text-white tracking-tight" id="dash-branch">สาขา สยามสแควร์</h2>
+          <div class="text-xs text-slate-400">
+            ผู้รับเหมา: <strong class="text-slate-200" id="dash-contractor">บจก. สยาม คอนสตรัคชั่น บิลเดอร์</strong> • 
+            ผู้ควบคุมงาน: <strong class="text-slate-200" id="dash-supervisor">วิศวกร ธนกร ชัยมงคล</strong>
+          </div>
+
+          <!-- 4 KPIs -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="text-[11px] text-slate-400">ความคืบหน้าจริง</div>
+              <div class="text-2xl font-bold font-mono text-emerald-400" id="dash-actual">84.7%</div>
+              <div class="text-[10px] text-slate-500">ถ่วงน้ำหนัก 4 หมวด</div>
+            </div>
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="text-[11px] text-slate-400">แผนงานสะสม</div>
+              <div class="text-2xl font-bold font-mono text-sky-300" id="dash-plan">78.0%</div>
+              <div class="text-[10px] text-slate-500">Baseline Plan สัปดาห์นี้</div>
+            </div>
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="text-[11px] text-slate-400">ส่วนต่าง (Variance)</div>
+              <div class="text-2xl font-bold font-mono text-emerald-400" id="dash-diff">+6.7%</div>
+              <div class="text-[10px] text-slate-500">Actual - Baseline</div>
+            </div>
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div class="text-[11px] text-slate-400">AI Confidence</div>
+              <div class="text-2xl font-bold font-mono text-cyan-300" id="dash-confidence">94%</div>
+              <div class="text-[10px] text-slate-500">≥ 80% Auto-approved</div>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-cyan-900/50 text-xs text-slate-300" id="dash-reasoning">
+            🤖 สรุปวิเคราะห์โดย AI PM: งานตกแต่งหน้าร้านและงานระบบไฟส่องสว่างเสร็จสมบูรณ์ เร็วกว่าแผนงาน 6.7%
+          </div>
+        </div>
+
+        <!-- 3D Voxel Mascot Column -->
+        <div class="lg:col-span-4 bg-slate-950 rounded-xl border border-slate-800 p-5 flex flex-col items-center justify-center text-center">
+          <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+            👷 3D Voxel Art Engineer Mascot
+          </div>
+          <div id="dash-mascot-container" class="w-40 h-40 flex items-center justify-center">
+            <!-- Voxel SVG Injected Dynamically -->
+          </div>
+          <div id="dash-mascot-badge" class="mt-3 px-3 py-1 rounded-full text-xs font-semibold border bg-emerald-500/20 text-emerald-300 border-emerald-500/50">
+            เร็วกว่าแผนงาน (+6.7%)
+          </div>
+          <div class="text-xs text-slate-400 mt-1" id="dash-mascot-item">ถือถ้วยรางวัลสีทอง (3D Voxel Gold Trophy)</div>
+        </div>
+      </div>
+
+      <!-- S-CURVE GRAPH (Week 0 Left -> Week N Right) -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+          <div>
+            <h3 class="text-base font-semibold text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+              กราฟความคืบหน้าสะสม S-Curve (เรียงจากสัปดาห์ที่ 0 ฝั่งซ้าย ➔ วันส่งมอบงานฝั่งขวา)
+            </h3>
+            <p class="text-xs text-slate-400">Week 0 (ซ้ายสุด) เริ่มต้น 0% ➔ Week N (ขวาสุด) วันส่งมอบงาน แผนงาน 100%</p>
+          </div>
+          <div class="flex items-center gap-4 text-xs">
+            <span class="flex items-center gap-1.5"><span class="w-3.5 h-0.5 border-t-2 border-dashed border-sky-400"></span> แผนงาน (Baseline Plan)</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> ความคืบหน้าจริง (AI Actual)</span>
+          </div>
+        </div>
+
+        <!-- S-Curve SVG -->
+        <div class="w-full aspect-[8/3] min-h-[240px] relative" id="scurve-chart-svg-container">
+          <!-- Rendered via JS -->
+        </div>
+
+        <div class="flex justify-between items-center text-[11px] text-slate-500 pt-1 border-t border-slate-800">
+          <span>◀ สัปดาห์เริ่มต้น (Week 0) แผนงาน 0%</span>
+          <span class="text-cyan-400 font-medium">เส้นทางเดินงานสะสม S-Curve โครงการ</span>
+          <span class="text-emerald-400 font-semibold" id="scurve-footer-right">วันส่งมอบงาน (Week 12) แผนงาน 100% ▶</span>
+        </div>
+      </div>
+
+      <!-- 4-Category Gallery -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-semibold text-slate-200">📷 ภาพถ่ายและผลประเมินแยก 4 หมวดหลัก (น้ำหนักรวม 100%)</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="dash-gallery-container">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: AI UPLOAD -->
+    <div id="tab-upload" class="hidden space-y-6">
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <h2 class="text-xl font-bold text-white mb-1">หน้าอัปโหลดรูปภาพไซต์งาน (AI Photo Evaluation)</h2>
+        <p class="text-xs text-slate-400 mb-5">
+          กรอกข้อมูลโครงการและแนบรูปถ่าย 4 มุมมองเพื่อประเมินความคืบหน้าจริงอัตโนมัติ
+        </p>
+
+        <!-- Project Metadata Form -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs mb-6">
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">1.5 ชื่อสาขา</label>
+            <input type="text" id="up-branch" value="สาขา พัทยา บีช" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">1.6 วันที่อัปโหลด (YYYY-MM-DD)</label>
+            <input type="date" id="up-date" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">1.7 วันที่ส่งมอบงาน (Delivery Date)</label>
+            <input type="date" id="up-delivery" value="2026-12-15" onchange="calculateUploadTimeline()" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">ระยะเวลารวมโครงการ (Total Weeks)</label>
+            <input type="number" id="up-weeks" value="12" min="4" max="52" onchange="calculateUploadTimeline()" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 font-mono">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">1.8 จังหวัด</label>
+            <input type="text" id="up-province" value="ชลบุรี" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-medium mb-1">1.9 ผู้รับเหมา</label>
+            <input type="text" id="up-contractor" value="บจก. สยาม คอนสตรัคชั่น บิลเดอร์" class="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100">
+          </div>
+        </div>
+
+        <!-- Dynamic Timeline Banner -->
+        <div class="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-800/80 mb-6 text-xs space-y-1.5" id="up-timeline-banner">
+          <div class="font-semibold text-cyan-300">⏱️ การคำนวณสัปดาห์โครงการอัตโนมัติ:</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-300 text-[11px]" id="up-timeline-details">
+            <!-- Computed dynamically -->
+          </div>
+        </div>
+
+        <!-- 4 Upload Slots -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="font-semibold text-slate-200">1.1 หน้าร้าน (Facade 30%)</div>
+            <div class="aspect-[4/3] bg-slate-900 rounded-lg flex items-center justify-center border border-dashed border-slate-700 text-slate-500">
+              🏢 แนบไฟล์รูป
+            </div>
+            <input type="number" id="score-front" value="75" min="0" max="100" class="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-cyan-400">
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="font-semibold text-slate-200">1.2 ภายใน (Interior 40%)</div>
+            <div class="aspect-[4/3] bg-slate-900 rounded-lg flex items-center justify-center border border-dashed border-slate-700 text-slate-500">
+              🛠️ แนบไฟล์รูป
+            </div>
+            <input type="number" id="score-interior" value="70" min="0" max="100" class="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-cyan-400">
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="font-semibold text-slate-200">1.3 หลังร้าน (Rear 15%)</div>
+            <div class="aspect-[4/3] bg-slate-900 rounded-lg flex items-center justify-center border border-dashed border-slate-700 text-slate-500">
+              🚪 แนบไฟล์รูป
+            </div>
+            <input type="number" id="score-rear" value="80" min="0" max="100" class="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-cyan-400">
+          </div>
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs space-y-2">
+            <div class="font-semibold text-slate-200">1.4 ลานจอดรถ (Parking 15%)</div>
+            <div class="aspect-[4/3] bg-slate-900 rounded-lg flex items-center justify-center border border-dashed border-slate-700 text-slate-500">
+              🚗 แนบไฟล์รูป
+            </div>
+            <input type="number" id="score-parking" value="65" min="0" max="100" class="w-full p-1.5 bg-slate-900 border border-slate-700 rounded text-center font-mono text-cyan-400">
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button onclick="submitUpload()" class="px-6 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-bold text-xs text-white shadow-lg shadow-cyan-600/30">
+            บันทึกและส่งประเมินผล AI
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: APPROVAL QUEUE -->
+    <div id="tab-queue" class="hidden space-y-4">
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <h2 class="text-xl font-bold text-white">คิวอนุมัติ AI (Confidence Approval Queue)</h2>
+        <p class="text-xs text-slate-400 mt-1">รายการที่มีค่า Confidence Score &lt; 80% หรือรอการตรวจสอบ</p>
+      </div>
+      <div id="queue-items-container" class="space-y-3">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+
+    <!-- TAB 4: SETTINGS (Admin Only) -->
+    <div id="tab-settings" class="hidden space-y-6">
+      <div id="settings-locked-banner" class="hidden max-w-md mx-auto my-12 bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-4 shadow-2xl">
+        <div class="w-16 h-16 rounded-2xl bg-rose-950/80 border border-rose-800 flex items-center justify-center mx-auto text-2xl">
+          🔒
+        </div>
+        <h3 class="text-lg font-bold text-white">สงวนสิทธิ์เฉพาะผู้ดูแลระบบ (Admin Only)</h3>
+        <p class="text-xs text-slate-400">
+          คุณต้องเข้าสู่ระบบด้วยรหัสผ่าน Admin เพื่อดูหรือปรับเปลี่ยนการตั้งค่า
+        </p>
+        <button onclick="openAdminAuth()" class="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs">
+          เข้าสู่ระบบ Admin
+        </button>
+      </div>
+
+      <div id="settings-content" class="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6 max-w-3xl mx-auto">
+        <h2 class="text-xl font-bold text-white border-b border-slate-800 pb-3">ตั้งค่าระบบ (Admin Settings)</h2>
+        
+        <!-- Weight Sliders -->
+        <div class="space-y-4 text-xs">
+          <div class="font-semibold text-slate-200">สัดส่วนน้ำหนัก 4 หมวดรูปภาพ (รวม 100%)</div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span>หน้าร้าน (Facade):</span>
+              <span id="label-w-front" class="font-mono text-cyan-400">30%</span>
+            </div>
+            <input type="range" id="range-w-front" min="0" max="100" value="30" oninput="updateWeightsUI()" class="w-full accent-cyan-500">
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span>ภายใน (Interior):</span>
+              <span id="label-w-interior" class="font-mono text-cyan-400">40%</span>
+            </div>
+            <input type="range" id="range-w-interior" min="0" max="100" value="40" oninput="updateWeightsUI()" class="w-full accent-cyan-500">
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span>หลังร้าน (Rear):</span>
+              <span id="label-w-rear" class="font-mono text-cyan-400">15%</span>
+            </div>
+            <input type="range" id="range-w-rear" min="0" max="100" value="15" oninput="updateWeightsUI()" class="w-full accent-cyan-500">
+          </div>
+          <div>
+            <div class="flex justify-between mb-1">
+              <span>ลานจอด (Parking):</span>
+              <span id="label-w-parking" class="font-mono text-cyan-400">15%</span>
+            </div>
+            <input type="range" id="range-w-parking" min="0" max="100" value="15" oninput="updateWeightsUI()" class="w-full accent-cyan-500">
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-3 border-t border-slate-800">
+          <button onclick="saveAdminSettings()" class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 font-bold text-xs text-white">
+            บันทึกการตั้งค่า
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ADMIN PASSCODE MODAL (Password Masked without Exposure, Passcode: 112224) -->
+  <div id="admin-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-bold text-white text-sm">เข้าสู่ระบบ Admin</h3>
+        <button onclick="closeAdminAuth()" class="text-slate-400 hover:text-slate-200">✕</button>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-300 mb-1.5">รหัสผ่านความปลอดภัย (6 หลัก):</label>
+        <input type="password" id="admin-input-passcode" placeholder="••••••" maxlength="10" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-center font-mono text-white text-base tracking-widest focus:border-cyan-500 focus:outline-none">
+        <div id="admin-error-msg" class="text-xs text-rose-400 mt-2 hidden text-center">รหัสผ่านไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง</div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="closeAdminAuth()" class="w-1/2 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs">ยกเลิก</button>
+        <button onclick="verifyAdminPasscode()" class="w-1/2 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs">ยืนยัน</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // State
+    let currentRole = 'ADMIN';
+    let currentTab = 'dashboard';
+    let settings = {
+      weights: { front: 30, interior: 40, rear: 15, parking: 15 },
+      sCurveWeeks: 12,
+      confidenceThreshold: 80,
+    };
+
+    let evaluations = [
+      {
+        id: 'TFM-2026-001',
+        branch_name: 'สาขา สยามสแควร์',
+        evaluated_date: '2026-10-02',
+        delivery_date: '2026-11-15',
+        total_weeks: 12,
+        province: 'กรุงเทพฯ',
+        contractor: 'บจก. สยาม คอนสตรัคชั่น บิลเดอร์',
+        supervisor: 'วิศวกร ธนกร ชัยมงคล',
+        confidence_score: 94,
+        category_scores: { front_facade: 88, interior: 85, rear_building: 80, parking_area: 82 },
+        calculated_actual_progress: 84.7,
+        baseline_plan_progress: 78.0,
+        variance_diff: 6.7,
+        status_flag: 'EXCELLENT',
+        approval_status: 'APPROVED',
+        summary_reasoning: 'งานตกแต่งหน้าร้านและงานระบบไฟส่องสว่างเสร็จสมบูรณ์ เร็วกว่าแผนงาน 6.7%',
+      },
+      {
+        id: 'TFM-2026-002',
+        branch_name: 'สาขา เชียงใหม่ นิมมาน',
+        evaluated_date: '2026-10-01',
+        delivery_date: '2026-12-10',
+        total_weeks: 12,
+        province: 'เชียงใหม่',
+        contractor: 'หจก. นครพิงค์ เอ็นจิเนียริ่ง',
+        supervisor: 'วิศวกร กิตติพงษ์ สุริยะวงศ์',
+        confidence_score: 91,
+        category_scores: { front_facade: 68, interior: 65, rear_building: 70, parking_area: 60 },
+        calculated_actual_progress: 65.9,
+        baseline_plan_progress: 65.0,
+        variance_diff: 0.9,
+        status_flag: 'ON_TRACK',
+        approval_status: 'APPROVED',
+        summary_reasoning: 'งานก่อสร้างโครงสร้างหลักและกั้นผนังห้องภายในเป็นไปตามเป้าหมาย',
+      },
+      {
+        id: 'TFM-2026-004',
+        branch_name: 'สาขา ขอนแก่น มิตรอารีย์',
+        evaluated_date: '2026-09-29',
+        delivery_date: '2026-11-20',
+        total_weeks: 12,
+        province: 'ขอนแก่น',
+        contractor: 'บจก. อีสาน บิลดิ้ง',
+        supervisor: 'วิศวกร สมศักดิ์ อานันท์',
+        confidence_score: 74,
+        category_scores: { front_facade: 30, interior: 25, rear_building: 35, parking_area: 20 },
+        calculated_actual_progress: 27.25,
+        baseline_plan_progress: 48.0,
+        variance_diff: -20.75,
+        status_flag: 'CRITICAL',
+        approval_status: 'PENDING_APPROVAL',
+        summary_reasoning: 'ล่าช้ากว่าเกณฑ์วิกฤต ภาพถ่ายภายในมัว ต้องการการตรวจสอบซ้ำ',
+      }
+    ];
+
+    // Initialize date
+    document.getElementById('up-date').value = new Date().toISOString().split('T')[0];
+
+    // Tab switcher
+    function switchTab(tab) {
+      currentTab = tab;
+      ['dashboard', 'upload', 'queue', 'settings'].forEach(t => {
+        document.getElementById('tab-' + t).classList.add('hidden');
+        const nav = document.getElementById('nav-' + t);
+        if (nav) {
+          nav.classList.remove('bg-cyan-600', 'text-white', 'shadow-md');
+          nav.classList.add('text-slate-400');
+        }
+      });
+      document.getElementById('tab-' + tab).classList.remove('hidden');
+      const activeNav = document.getElementById('nav-' + tab);
+      if (activeNav) {
+        activeNav.classList.add('bg-cyan-600', 'text-white', 'shadow-md');
+        activeNav.classList.remove('text-slate-400');
+      }
+
+      if (tab === 'settings') {
+        if (currentRole !== 'ADMIN') {
+          document.getElementById('settings-locked-banner').classList.remove('hidden');
+          document.getElementById('settings-content').classList.add('hidden');
+        } else {
+          document.getElementById('settings-locked-banner').classList.add('hidden');
+          document.getElementById('settings-content').classList.remove('hidden');
+        }
+      }
+
+      if (tab === 'dashboard') renderDashboard();
+      if (tab === 'queue') renderQueue();
+      if (tab === 'upload') calculateUploadTimeline();
+    }
+
+    // Role switcher
+    function setRole(role) {
+      currentRole = role;
+      document.getElementById('role-contractor').className = role === 'CONTRACTOR' ? 'px-2.5 py-1 rounded-lg bg-amber-600/30 text-amber-300 font-semibold' : 'px-2.5 py-1 rounded-lg text-slate-400';
+      document.getElementById('role-supervisor').className = role === 'SUPERVISOR' ? 'px-2.5 py-1 rounded-lg bg-blue-600/30 text-blue-300 font-semibold' : 'px-2.5 py-1 rounded-lg text-slate-400';
+      document.getElementById('role-admin').className = role === 'ADMIN' ? 'px-2.5 py-1 rounded-lg bg-cyan-600/30 text-cyan-300 font-semibold' : 'px-2.5 py-1 rounded-lg text-slate-400';
+      if (currentTab === 'settings') switchTab('settings');
+    }
+
+    function openAdminAuth() {
+      if (currentRole === 'ADMIN') return;
+      document.getElementById('admin-modal').classList.remove('hidden');
+      document.getElementById('admin-modal').classList.add('flex');
+      document.getElementById('admin-input-passcode').value = '';
+      document.getElementById('admin-error-msg').classList.add('hidden');
+      document.getElementById('admin-input-passcode').focus();
+    }
+
+    function closeAdminAuth() {
+      document.getElementById('admin-modal').classList.add('hidden');
+      document.getElementById('admin-modal').classList.remove('flex');
+    }
+
+    function verifyAdminPasscode() {
+      const code = document.getElementById('admin-input-passcode').value;
+      if (code === '112224') { // Changed to 112224 per request 3
+        setRole('ADMIN');
+        closeAdminAuth();
+      } else {
+        document.getElementById('admin-error-msg').classList.remove('hidden');
+      }
+    }
+
+    // Dynamic Upload Timeline Calculation (Requirement 5)
+    function calculateUploadTimeline() {
+      const deliveryVal = document.getElementById('up-delivery').value;
+      const uploadVal = document.getElementById('up-date').value;
+      const totalWeeks = Number(document.getElementById('up-weeks').value) || 12;
+
+      const delivery = new Date(deliveryVal);
+      const upload = new Date(uploadVal);
+      const totalDays = totalWeeks * 7;
+      const startDate = new Date(delivery.getTime() - totalDays * 86400000);
+      const daysRemaining = Math.ceil((delivery.getTime() - upload.getTime()) / 86400000);
+      const daysElapsed = Math.max(0, totalDays - daysRemaining);
+      const currWeek = Math.min(totalWeeks, Math.max(0, Math.round(daysElapsed / 7)));
+
+      document.getElementById('up-timeline-details').innerHTML = `
+        <div class="bg-slate-900 p-2 rounded-lg">วันเริ่มงาน (Week 0): <strong class="text-white font-mono">${startDate.toISOString().split('T')[0]}</strong></div>
+        <div class="bg-slate-900 p-2 rounded-lg">สัปดาห์ปัจจุบัน: <strong class="text-cyan-400 font-mono">Week ${currWeek} / ${totalWeeks}</strong></div>
+        <div class="bg-slate-900 p-2 rounded-lg">วันส่งมอบงาน (Week ${totalWeeks}): <strong class="text-emerald-400 font-mono">${deliveryVal}</strong> (เหลือ ${daysRemaining} วัน)</div>
+      `;
+    }
+
+    // Submit Evaluation
+    function submitUpload() {
+      const branch = document.getElementById('up-branch').value;
+      const uploadDate = document.getElementById('up-date').value;
+      const deliveryDate = document.getElementById('up-delivery').value;
+      const totalWeeks = Number(document.getElementById('up-weeks').value) || 12;
+      const province = document.getElementById('up-province').value;
+      const contractor = document.getElementById('up-contractor').value;
+
+      const f = Number(document.getElementById('score-front').value) || 0;
+      const i = Number(document.getElementById('score-interior').value) || 0;
+      const r = Number(document.getElementById('score-rear').value) || 0;
+      const p = Number(document.getElementById('score-parking').value) || 0;
+
+      const actual = parseFloat((f * 0.3 + i * 0.4 + r * 0.15 + p * 0.15).toFixed(1));
+      const plan = 70;
+      const diff = parseFloat((actual - plan).toFixed(1));
+      const conf = 85;
+
+      const newRec = {
+        id: 'TFM-2026-' + Math.floor(100 + Math.random() * 900),
+        branch_name: branch,
+        evaluated_date: uploadDate,
+        delivery_date: deliveryDate,
+        total_weeks: totalWeeks,
+        province,
+        contractor,
+        supervisor: 'วิศวกรประจำโครงการ',
+        confidence_score: conf,
+        category_scores: { front_facade: f, interior: i, rear_building: r, parking_area: p },
+        calculated_actual_progress: actual,
+        baseline_plan_progress: plan,
+        variance_diff: diff,
+        status_flag: diff >= 5 ? 'EXCELLENT' : diff >= -5 ? 'ON_TRACK' : diff >= -15 ? 'WARNING' : 'CRITICAL',
+        approval_status: 'APPROVED',
+        summary_reasoning: `ประเมินความคืบหน้ารวมได้ ${actual}% เทียบแผนงาน ${plan}% (ส่วนต่าง ${diff > 0 ? '+' : ''}${diff}%)`
+      };
+
+      evaluations.unshift(newRec);
+      alert('บันทึกผลการประเมินโครงการ ' + branch + ' เรียบร้อยแล้ว!');
+      switchTab('dashboard');
+    }
+
+    // 3D Voxel Mascot Renderer
+    function getVoxelMascotSvg(diff) {
+      let pose = 'FOLDED_ARMS';
+      let accent = '#38bdf8';
+      let toolSvg = '';
+
+      if (diff >= 5) {
+        pose = 'GOLD_TROPHY';
+        accent = '#10b981';
+        toolSvg = `
+          <!-- 3D Voxel Trophy Raised in Hand -->
+          <polygon points="135,45 155,30 175,45 155,60" fill="#fef08a" />
+          <polygon points="135,45 155,60 155,80 135,65" fill="#facc15" />
+          <polygon points="155,60 175,45 175,65 155,80" fill="#ca8a04" />
+          <polygon points="148,80 162,70 162,95 148,105" fill="#78350f" />
+        `;
+      } else if (diff >= -5) {
+        pose = 'FOLDED_ARMS';
+        accent = '#38bdf8';
+        toolSvg = `
+          <!-- 3D Voxel Folded Arms -->
+          <polygon points="85,120 120,135 155,120 120,105" fill="#fb923c" />
+          <polygon points="85,120 120,135 120,150 85,135" fill="#ea580c" />
+          <polygon points="120,135 155,120 155,135 120,150" fill="#c2410c" />
+        `;
+      } else if (diff >= -15) {
+        pose = 'BINOCULARS';
+        accent = '#f59e0b';
+        toolSvg = `
+          <!-- 3D Voxel Binoculars to Visor -->
+          <polygon points="100,75 120,85 140,75 120,65" fill="#334155" />
+          <polygon points="90,80 110,90 110,100 90,90" fill="#0284c7" />
+          <polygon points="130,80 150,90 150,100 130,90" fill="#0284c7" />
+        `;
+      } else {
+        pose = 'RED_FLAG';
+        accent = '#f43f5e';
+        toolSvg = `
+          <!-- 3D Voxel Red Hazard Flag on Pole -->
+          <line x1="165" y1="20" x2="165" y2="150" stroke="#cbd5e1" stroke-width="4" stroke-linecap="round" />
+          <polygon points="165,25 205,45 165,65" fill="#e11d48" />
+          <polygon points="165,25 185,15 205,45" fill="#fb7185" />
+        `;
+      }
+
+      return `
+        <svg viewBox="0 0 220 220" class="w-full h-full drop-shadow-xl" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Isometric Voxel Base Shadow -->
+          <ellipse cx="110" cy="195" rx="55" ry="12" fill="#090d16" opacity="0.6" />
+          
+          <!-- Voxel Boots -->
+          <polygon points="80,165 95,155 110,165 95,175" fill="#475569" />
+          <polygon points="80,165 95,175 95,188 80,178" fill="#334155" />
+          <polygon points="95,175 110,165 110,178 95,188" fill="#1e293b" />
+
+          <polygon points="115,165 130,155 145,165 130,175" fill="#475569" />
+          <polygon points="115,165 130,175 130,188 115,178" fill="#334155" />
+          <polygon points="130,175 145,165 145,178 130,188" fill="#1e293b" />
+
+          <!-- Voxel Body (High-Vis Vest) -->
+          <polygon points="85,115 110,100 135,115 110,130" fill="#f97316" />
+          <polygon points="85,115 110,130 110,165 85,150" fill="#ea580c" />
+          <polygon points="110,130 135,115 135,150 110,165" fill="#c2410c" />
+
+          <!-- Voxel Reflective Stripe -->
+          <polygon points="85,130 110,145 110,152 85,137" fill="#f8fafc" />
+          <polygon points="110,145 135,130 135,137 110,152" fill="#cbd5e1" />
+
+          <!-- Voxel Head -->
+          <polygon points="90,75 110,65 130,75 110,85" fill="#fed7aa" />
+          <polygon points="90,75 110,85 110,110 90,100" fill="#fba76a" />
+          <polygon points="110,85 130,75 130,100 110,110" fill="#ea580c" />
+
+          <!-- 3D Voxel Visor -->
+          <polygon points="88,82 110,92 132,82 110,72" fill="#0f172a" />
+          <polygon points="88,82 110,92 110,98 88,88" fill="${accent}" />
+          <polygon points="110,92 132,82 132,88 110,98" fill="${accent}" />
+
+          <!-- 3D Voxel Safety Helmet -->
+          <polygon points="80,68 110,50 140,68 110,86" fill="#fde047" />
+          <polygon points="80,68 110,86 110,92 80,74" fill="#eab308" />
+          <polygon points="110,86 140,68 140,74 110,92" fill="#ca8a04" />
+          
+          <!-- Helmet Top Tier -->
+          <polygon points="95,48 110,38 125,48 110,58" fill="#fef08a" />
+          <polygon points="95,48 110,58 110,64 95,54" fill="#fde047" />
+          <polygon points="110,58 125,48 125,54 110,64" fill="#ca8a04" />
+
+          ${toolSvg}
+        </svg>
+      `;
+    }
+
+    // Render Dashboard
+    function renderDashboard() {
+      const branchFilter = document.getElementById('filter-branch').value;
+      const rec = evaluations.find(e => branchFilter === 'ALL' || e.branch_name === branchFilter) || evaluations[0];
+
+      document.getElementById('dash-id').innerText = rec.id;
+      document.getElementById('dash-branch').innerText = rec.branch_name;
+      document.getElementById('dash-province').innerText = rec.province;
+      document.getElementById('dash-contractor').innerText = rec.contractor;
+      document.getElementById('dash-supervisor').innerText = rec.supervisor;
+      document.getElementById('dash-actual').innerText = rec.calculated_actual_progress + '%';
+      document.getElementById('dash-plan').innerText = rec.baseline_plan_progress + '%';
+      document.getElementById('dash-diff').innerText = (rec.variance_diff >= 0 ? '+' : '') + rec.variance_diff + '%';
+      document.getElementById('dash-diff').className = 'text-2xl font-bold font-mono ' + (rec.variance_diff >= 0 ? 'text-emerald-400' : 'text-rose-400');
+      document.getElementById('dash-confidence').innerText = rec.confidence_score + '%';
+      document.getElementById('dash-reasoning').innerText = '🤖 สรุปวิเคราะห์โดย AI PM: ' + rec.summary_reasoning;
+
+      // 3D Voxel Mascot
+      document.getElementById('dash-mascot-container').innerHTML = getVoxelMascotSvg(rec.variance_diff);
+      let badgeText = 'เป็นไปตามแผนงาน';
+      let badgeClass = 'bg-sky-500/20 text-sky-300 border-sky-500/50';
+      let itemText = 'ยืนกอดอก มาดมั่น (3D Voxel Folded Arms)';
+      if (rec.variance_diff >= 5) {
+        badgeText = 'เร็วกว่าแผนงาน (+' + rec.variance_diff + '%)';
+        badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50';
+        itemText = 'ถือถ้วยรางวัลสีทอง (3D Voxel Gold Trophy)';
+      } else if (rec.variance_diff >= -15 && rec.variance_diff < -5) {
+        badgeText = 'ต้องเฝ้าระวัง (' + rec.variance_diff + '%)';
+        badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/50';
+        itemText = 'ถือกล้องส่องทางไกล (3D Voxel Binoculars)';
+      } else if (rec.variance_diff < -15) {
+        badgeText = 'วิกฤต! ล่าช้ามาก (' + rec.variance_diff + '%)';
+        badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/50';
+        itemText = 'ถือธงสีแดง (3D Voxel Red Flag)';
+      }
+      document.getElementById('dash-mascot-badge').className = 'mt-3 px-3 py-1 rounded-full text-xs font-semibold border ' + badgeClass;
+      document.getElementById('dash-mascot-badge').innerText = badgeText;
+      document.getElementById('dash-mascot-item').innerText = itemText;
+
+      // Render S-Curve (Week 0 Left -> Week N Right)
+      renderSCurve(rec);
+
+      // Render Gallery
+      document.getElementById('dash-gallery-container').innerHTML = `
+        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2">
+          <div class="flex justify-between text-xs font-semibold text-slate-200">
+            <span>1.1 หน้าร้าน (30%)</span>
+            <span class="text-cyan-400 font-mono">${rec.category_scores.front_facade}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-cyan-500 h-full rounded-full" style="width: ${rec.category_scores.front_facade}%"></div>
+          </div>
+          <p class="text-[10px] text-slate-500">ป้ายร้าน, กระจกหน้าร้าน, โครงสร้างเสา/คาน</p>
+        </div>
+        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2">
+          <div class="flex justify-between text-xs font-semibold text-slate-200">
+            <span>1.2 ภายใน (40%)</span>
+            <span class="text-cyan-400 font-mono">${rec.category_scores.interior}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-cyan-500 h-full rounded-full" style="width: ${rec.category_scores.interior}%"></div>
+          </div>
+          <p class="text-[10px] text-slate-500">งานฝ้าเพดาน, ระบบไฟฟ้า/แอร์, งานปูพื้น</p>
+        </div>
+        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2">
+          <div class="flex justify-between text-xs font-semibold text-slate-200">
+            <span>1.3 หลังร้าน (15%)</span>
+            <span class="text-cyan-400 font-mono">${rec.category_scores.rear_building}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-cyan-500 h-full rounded-full" style="width: ${rec.category_scores.rear_building}%"></div>
+          </div>
+          <p class="text-[10px] text-slate-500">ประตูทางออกหลังร้าน, ระบบบำบัดน้ำเสีย</p>
+        </div>
+        <div class="bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2">
+          <div class="flex justify-between text-xs font-semibold text-slate-200">
+            <span>1.4 ลานจอด (15%)</span>
+            <span class="text-cyan-400 font-mono">${rec.category_scores.parking_area}%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div class="bg-cyan-500 h-full rounded-full" style="width: ${rec.category_scores.parking_area}%"></div>
+          </div>
+          <p class="text-[10px] text-slate-500">งานเทคอนกรีต, เส้นจราจร, ไฟส่องสว่าง</p>
+        </div>
+      `;
+    }
+
+    // S-Curve forward week calculation
+    function renderSCurve(rec) {
+      const totalWeeks = rec.total_weeks || 12;
+      const delivery = new Date(rec.delivery_date);
+      const evalDate = new Date(rec.evaluated_date);
+      const totalDays = totalWeeks * 7;
+      const startDate = new Date(delivery.getTime() - totalDays * 86400000);
+      const daysElapsed = Math.max(0, (evalDate.getTime() - startDate.getTime()) / 86400000);
+      const currWeek = Math.min(totalWeeks, Math.max(0, Math.round(daysElapsed / 7)));
+
+      document.getElementById('scurve-footer-right').innerText = `วันส่งมอบงาน (Week ${totalWeeks}) แผนงาน 100% ▶`;
+
+      const width = 800;
+      const height = 260;
+      const padLeft = 45;
+      const padRight = 35;
+      const padTop = 25;
+      const padBottom = 40;
+      const chartW = width - padLeft - padRight;
+      const chartH = height - padTop - padBottom;
+
+      const getX = (w) => padLeft + (w / totalWeeks) * chartW;
+      const getY = (val) => padTop + chartH - (val / 100) * chartH;
+
+      // Plan curve (0 to 100%)
+      let planPath = '';
+      for (let w = 0; w <= totalWeeks; w++) {
+        const t = w / totalWeeks;
+        const sig = (1 / (1 + Math.exp(-6 * (t - 0.5))) - 0.047) / (0.952 - 0.047);
+        const planVal = Math.round(sig * 100);
+        planPath += `${w === 0 ? 'M' : 'L'} ${getX(w)} ${getY(planVal)} `;
+      }
+
+      // Actual curve (0 up to currWeek)
+      let actualPath = '';
+      for (let w = 0; w <= currWeek; w++) {
+        const ratio = w / (currWeek || 1);
+        const actVal = w === currWeek ? rec.calculated_actual_progress : Math.round(rec.calculated_actual_progress * Math.pow(ratio, 1.1));
+        actualPath += `${w === 0 ? 'M' : 'L'} ${getX(w)} ${getY(actVal)} `;
+      }
+
+      let gridLines = '';
+      [0, 25, 50, 75, 100].forEach(val => {
+        const y = getY(val);
+        gridLines += `
+          <line x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}" stroke="#1e293b" stroke-width="0.8" stroke-dasharray="3,3"/>
+          <text x="${padLeft - 8}" y="${y + 4}" fill="#64748b" font-size="10" text-anchor="end" font-family="monospace">${val}%</text>
+        `;
+      });
+
+      let weekMarkers = '';
+      for (let w = 0; w <= totalWeeks; w += (totalWeeks > 16 ? 2 : 1)) {
+        const x = getX(w);
+        const isCur = w === currWeek;
+        const isDel = w === totalWeeks;
+        weekMarkers += `
+          <line x1="${x}" y1="${padTop}" x2="${x}" y2="${height - padBottom}" stroke="${isCur ? '#0284c7' : '#1e293b'}" stroke-width="${isCur ? '1.5' : '0.6'}"/>
+          <text x="${x}" y="${height - padBottom + 16}" fill="${isCur ? '#38bdf8' : isDel ? '#34d399' : '#94a3b8'}" font-size="9" text-anchor="middle" font-weight="${isCur || isDel ? 'bold' : 'normal'}">
+            ${w === 0 ? 'W0' : isCur ? `W${w}*` : isDel ? `W${w}` : `W${w}`}
+          </text>
+        `;
+      }
+
+      document.getElementById('scurve-chart-svg-container').innerHTML = `
+        <svg viewBox="0 0 ${width} ${height}" class="w-full h-full select-none" preserveAspectRatio="none">
+          ${gridLines}
+          ${weekMarkers}
+          <!-- Plan line (Cyan dashed) -->
+          <path d="${planPath}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-dasharray="5,4" />
+          <!-- Actual line (Emerald solid) -->
+          <path d="${actualPath}" fill="none" stroke="#10b981" stroke-width="3.5" stroke-linecap="round" />
+          <!-- Current week point -->
+          <circle cx="${getX(currWeek)}" cy="${getY(rec.calculated_actual_progress)}" r="6" fill="#10b981" stroke="#0f172a" stroke-width="2.5" />
+          <circle cx="${getX(currWeek)}" cy="${getY(rec.calculated_actual_progress)}" r="10" fill="#10b981" opacity="0.3" />
+        </svg>
+      `;
+    }
+
+    function renderQueue() {
+      const items = evaluations.filter(e => e.approval_status === 'PENDING_APPROVAL');
+      document.getElementById('queue-badge').innerText = items.length;
+      if (items.length === 0) {
+        document.getElementById('queue-items-container').innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-400 text-xs">
+            ไม่มีรายการรออนุมัติในคิวขณะนี้
+          </div>
+        `;
+        return;
+      }
+
+      document.getElementById('queue-items-container').innerHTML = items.map(item => `
+        <div class="bg-slate-900 border border-amber-500/50 rounded-2xl p-5 shadow-lg space-y-3">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-xs px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-mono">
+                Confidence ${item.confidence_score}% &lt; 80%
+              </span>
+              <h3 class="text-base font-bold text-white mt-1">${item.branch_name}</h3>
+              <div class="text-xs text-slate-400">ผู้รับเหมา: ${item.contractor} • ส่งมอบ: ${item.delivery_date}</div>
+            </div>
+            <div class="text-right font-mono">
+              <div class="text-lg font-bold text-emerald-400">${item.calculated_actual_progress}%</div>
+              <div class="text-[11px] text-rose-400">Diff: ${item.variance_diff}%</div>
+            </div>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg text-xs text-slate-300">
+            🤖 ${item.summary_reasoning}
+          </div>
+          <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+            <button onclick="approveQueue('${item.id}')" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs">
+              อนุมัติและเผยแพร่
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function approveQueue(id) {
+      if (currentRole === 'CONTRACTOR') {
+        alert('ผู้รับเหมาไม่มีสิทธิ์อนุมัติรายการ กรุณาเข้าสู่ระบบเป็น Supervisor หรือ Admin');
+        return;
+      }
+      const item = evaluations.find(e => e.id === id);
+      if (item) {
+        item.approval_status = 'APPROVED';
+        alert('อนุมัติผลประเมิน ' + item.branch_name + ' สำเร็จแล้ว!');
+        renderQueue();
+      }
+    }
+
+    function updateWeightsUI() {
+      const f = Number(document.getElementById('range-w-front').value);
+      const i = Number(document.getElementById('range-w-interior').value);
+      const r = Number(document.getElementById('range-w-rear').value);
+      const p = Number(document.getElementById('range-w-parking').value);
+      document.getElementById('label-w-front').innerText = f + '%';
+      document.getElementById('label-w-interior').innerText = i + '%';
+      document.getElementById('label-w-rear').innerText = r + '%';
+      document.getElementById('label-w-parking').innerText = p + '%';
+    }
+
+    function saveAdminSettings() {
+      if (currentRole !== 'ADMIN') {
+        alert('สงวนสิทธิ์เฉพาะ Admin เท่านั้น');
+        return;
+      }
+      const f = Number(document.getElementById('range-w-front').value);
+      const i = Number(document.getElementById('range-w-interior').value);
+      const r = Number(document.getElementById('range-w-rear').value);
+      const p = Number(document.getElementById('range-w-parking').value);
+      if (f + i + r + p !== 100) {
+        alert('ผลรวมน้ำหนักต้องเท่ากับ 100% พอดี (ปัจจุบันรวม ' + (f + i + r + p) + '%)');
+        return;
+      }
+      settings.weights = { front: f, interior: i, rear: r, parking: p };
+      alert('บันทึกการตั้งค่าระบบเรียบร้อยแล้ว!');
+    }
+
+    // Initial render
+    renderDashboard();
+  </script>
+</body>
+</html>

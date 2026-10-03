@@ -1,0 +1,6 @@
+{
+  "name": "Shop TFM - AI Construction Tracker",
+  "description": "ระบบบริหารและติดตามความคืบหน้างานก่อสร้าง Shop TFM ด้วย AI Vision, กราฟ S-Curve, AI Mascot และรองรับ Google Sheets Database / Google Apps Script",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
