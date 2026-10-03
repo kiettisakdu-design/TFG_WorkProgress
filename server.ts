@@ -251,24 +251,92 @@ Please inspect the attached 4 images (Facade, Interior, Rear, Parking) and evalu
   }
 });
 
-// Proxy to test or sync with Google Apps Script Web App
+// Proxy to GET data from Google Apps Script Web App
+app.get('/api/sheets-fetch', async (req, res) => {
+  try {
+    const webAppUrl =
+      (req.query.webAppUrl as string) ||
+      'https://script.google.com/macros/s/AKfycby4MEv9_boOGHjByMp_xjFCfi5x0tVhzNmmdOQLaOBZslfeWqWS2tHeY29VmpK5xR9M/exec';
+    const action = (req.query.action as string) || 'getData';
+
+    const targetUrl = new URL(webAppUrl);
+    targetUrl.searchParams.set('action', action);
+    targetUrl.searchParams.set('format', 'json');
+    targetUrl.searchParams.set('_t', Date.now().toString());
+
+    const response = await fetch(targetUrl.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json, text/plain, */*',
+      },
+      redirect: 'follow',
+    });
+
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { rawText: text };
+    }
+
+    res.json({
+      success: response.ok,
+      status: response.status,
+      data,
+    });
+  } catch (err: any) {
+    console.error('Error fetching from Google Sheets via GET:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch from Google Sheet' });
+  }
+});
+
+// Proxy to test or sync with Google Apps Script Web App via POST
 app.post('/api/sync-sheets', async (req, res) => {
   try {
-    const { webAppUrl, action = 'sync', payload } = req.body;
+    const {
+      webAppUrl = 'https://script.google.com/macros/s/AKfycby4MEv9_boOGHjByMp_xjFCfi5x0tVhzNmmdOQLaOBZslfeWqWS2tHeY29VmpK5xR9M/exec',
+      action = 'addEvaluation',
+      payload,
+    } = req.body;
+
     if (!webAppUrl) {
       return res.status(400).json({ success: false, error: 'Web App URL is required' });
     }
 
-    // Send payload to Google Apps Script
+    // Send payload to Google Apps Script via POST fetch()
     const response = await fetch(webAppUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action, data: payload, timestamp: new Date().toISOString() }),
+      redirect: 'follow',
     });
 
-    const result = await response.json().catch(() => ({ status: 'success', raw: true }));
-    res.json({ success: true, result });
+    const text = await response.text();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      // Check if it is an Apps Script HTML error page
+      const match = text.match(/<div style="text-align:center;font-family:monospace[^>]*>(.*?)<\/div>/s);
+      const cleanError = match ? match[1].replace(/<[^>]*>/g, '').trim() : null;
+      if (cleanError) {
+        result = {
+          status: 'error',
+          error: cleanError,
+          help: cleanError.includes('1lmqQ3y7IPv0zB3tH_QoyFebMlZxflhfJ8nIhTM3NscY')
+            ? 'ในไฟล์ Code.gs ของ Google Apps Script ให้ใช้ SpreadsheetApp.getActiveSpreadsheet() แทนการใช้ SpreadsheetApp.openById("1lmqQ3y7...")'
+            : undefined,
+          raw: text.slice(0, 500),
+        };
+      } else {
+        result = { status: response.ok ? 'success' : 'error', raw: text };
+      }
+    }
+
+    res.json({ success: response.ok && (!result || result.status !== 'error'), result });
   } catch (err: any) {
+    console.error('Error syncing to Google Sheet via POST:', err);
     res.status(500).json({ success: false, error: err.message || 'Failed to sync with Google Sheet' });
   }
 });

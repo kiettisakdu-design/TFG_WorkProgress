@@ -44,6 +44,16 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
+  const [isFetchingGet, setIsFetchingGet] = useState(false);
+  const [lastFetchResult, setLastFetchResult] = useState<{
+    method: 'GET' | 'POST' | 'PING';
+    status: 'success' | 'error';
+    statusCode?: number;
+    latencyMs?: number;
+    message: string;
+    details?: any;
+  } | null>(null);
+
   const handleCopyCurrentCode = () => {
     const textToCopy = activeCodeTab === 'code_gs' ? APPS_SCRIPT_CODE_GS : (window as any).__INDEX_HTML_CONTENT__ || '<!-- Index.html available in file Index.html -->';
     navigator.clipboard.writeText(textToCopy);
@@ -72,6 +82,7 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
     setTimeout(() => setTestResult(null), 3000);
   };
 
+  // Test Ping via POST
   const handleTestConnection = async () => {
     if (!webAppUrl) {
       setTestResult({ success: false, msg: 'กรุณากรอก Google Apps Script Web App URL ก่อนทดสอบ' });
@@ -80,9 +91,9 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
 
     setIsTesting(true);
     setTestResult(null);
+    const startTime = performance.now();
 
     try {
-      // Test via server proxy to bypass CORS
       const res = await fetch('/api/sync-sheets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,24 +103,103 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
         }),
       });
       const data = await res.json();
+      const elapsed = Math.round(performance.now() - startTime);
+
       if (data.success) {
         setTestResult({
           success: true,
-          msg: 'เชื่อมต่อสำเร็จ! Google Apps Script พร้อมทำหน้าที่เป็น Database',
+          msg: `เชื่อมต่อสำเร็จ! (Response ${elapsed}ms) Google Apps Script พร้อมทำงาน`,
+        });
+        setLastFetchResult({
+          method: 'PING',
+          status: 'success',
+          latencyMs: elapsed,
+          message: 'Google Apps Script ตอบกลับ 200 OK',
+          details: data.result,
         });
       } else {
         throw new Error(data.error || 'Connection failed');
       }
     } catch (err: any) {
+      const elapsed = Math.round(performance.now() - startTime);
       setTestResult({
         success: false,
-        msg: `เชื่อมต่อไม่สำเร็จ: ${err.message || 'โปรดตรวจสอบสิทธิ์ "Anyone" ในการ Deploy Web App'}`,
+        msg: `เชื่อมต่อไม่สำเร็จ: ${err.message || 'โปรดตรวจสอบการ Deploy Web App เป็น Anyone'}`,
+      });
+      setLastFetchResult({
+        method: 'PING',
+        status: 'error',
+        latencyMs: elapsed,
+        message: err.message || 'Failed to ping Google Apps Script',
       });
     } finally {
       setIsTesting(false);
     }
   };
 
+  // Fetch data using GET fetch()
+  const handleFetchViaGet = async () => {
+    if (!webAppUrl) {
+      setTestResult({ success: false, msg: 'กรุณากรอก Web App URL ก่อนเรียก GET' });
+      return;
+    }
+
+    setIsFetchingGet(true);
+    const startTime = performance.now();
+
+    try {
+      const { fetchEvaluationsFromSheets } = await import('../utils/googleSheetsIntegration');
+      const res = await fetchEvaluationsFromSheets(webAppUrl);
+      const elapsed = Math.round(performance.now() - startTime);
+
+      if (res.success) {
+        if (res.data && res.data.length > 0) {
+          onImportEvaluations(res.data);
+          setTestResult({
+            success: true,
+            msg: `ดึงข้อมูลด้วย GET fetch() สำเร็จ! พบ ${res.data.length} รายการ (${elapsed}ms)`,
+          });
+          setLastFetchResult({
+            method: 'GET',
+            status: 'success',
+            latencyMs: elapsed,
+            message: `ดึงข้อมูลสำเร็จ ${res.data.length} รายการจาก Google Sheet`,
+            details: { count: res.data.length, source: res.source, sample: res.data.slice(0, 2) },
+          });
+        } else {
+          setTestResult({
+            success: true,
+            msg: `ดึงข้อมูลด้วย GET fetch() สำเร็จ (สถานะชีตยังว่างเปล่า หรือเพิ่งสร้างใหม่) (${elapsed}ms)`,
+          });
+          setLastFetchResult({
+            method: 'GET',
+            status: 'success',
+            latencyMs: elapsed,
+            message: 'เชื่อมต่อชีตสำเร็จ 200 OK (แต่ยังไม่มีข้อมูลโครงการ)',
+            details: { count: 0, note: 'สามารถกดปุ่ม POST ด้านล่างเพื่อส่งข้อมูลโครงการขึ้นชีตได้ทันที' },
+          });
+        }
+      } else {
+        throw new Error(res.error || 'GET fetch failed');
+      }
+    } catch (err: any) {
+      const elapsed = Math.round(performance.now() - startTime);
+      setTestResult({
+        success: false,
+        msg: `ดึงข้อมูลด้วย GET ไม่สำเร็จ: ${err.message}`,
+      });
+      setLastFetchResult({
+        method: 'GET',
+        status: 'error',
+        latencyMs: elapsed,
+        message: err.message,
+      });
+    } finally {
+      setIsFetchingGet(false);
+    }
+  };
+
+  // Sync data using POST fetch()
   const handleSyncToSheets = async () => {
     if (!webAppUrl) {
       setSyncStatus('กรุณากรอก Web App URL ก่อน');
@@ -117,26 +207,41 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
     }
 
     setIsSyncing(true);
-    setSyncStatus('กำลังส่งข้อมูลโครงการทั้งหมดไปยัง Google Sheets...');
+    setSyncStatus('กำลังส่งข้อมูลโครงการไปยัง Google Sheet ผ่าน fetch() POST...');
+    const startTime = performance.now();
 
     try {
+      const { saveEvaluationToSheets } = await import('../utils/googleSheetsIntegration');
       let count = 0;
+      let lastResultObj = null;
+
       for (const ev of evaluations) {
-        await fetch('/api/sync-sheets', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            webAppUrl,
-            action: 'addEvaluation',
-            payload: ev,
-          }),
-        });
-        count++;
+        const res = await saveEvaluationToSheets(ev, webAppUrl);
+        if (res.success) {
+          count++;
+          lastResultObj = res.result;
+        }
       }
-      setSyncStatus(`ซิงค์ข้อมูลสำเร็จเรียบร้อยแล้ว (${count} รายการ)`);
+
+      const elapsed = Math.round(performance.now() - startTime);
+      setSyncStatus(`ส่งข้อมูลสำเร็จเรียบร้อย (${count}/${evaluations.length} รายการ) ใน ${elapsed}ms`);
+      setLastFetchResult({
+        method: 'POST',
+        status: 'success',
+        latencyMs: elapsed,
+        message: `ส่งข้อมูลผ่าน fetch() POST สำเร็จทั้งหมด ${count} รายการ`,
+        details: lastResultObj,
+      });
       setTimeout(() => setSyncStatus(null), 4000);
     } catch (err: any) {
-      setSyncStatus(`การซิงค์ขัดข้อง: ${err.message}`);
+      const elapsed = Math.round(performance.now() - startTime);
+      setSyncStatus(`การส่งข้อมูลขัดข้อง: ${err.message}`);
+      setLastFetchResult({
+        method: 'POST',
+        status: 'error',
+        latencyMs: elapsed,
+        message: err.message,
+      });
     } finally {
       setIsSyncing(false);
     }
@@ -234,7 +339,20 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
               <span>ซิงค์ผลการประเมินลง Google Sheet อัตโนมัติทุกครั้งเมื่อบันทึก (Auto-Sync)</span>
             </label>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleFetchViaGet}
+                disabled={isFetchingGet || !webAppUrl}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  isFetchingGet || !webAppUrl
+                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md'
+                }`}
+              >
+                <RefreshCw className={`w-4 h-4 ${isFetchingGet ? 'animate-spin' : ''}`} />
+                <span>{isFetchingGet ? 'กำลังดึงข้อมูล (GET)...' : 'ดึงข้อมูลจากชีต (GET fetch)'}</span>
+              </button>
+
               <button
                 onClick={handleSyncToSheets}
                 disabled={isSyncing || !webAppUrl}
@@ -245,7 +363,7 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
                 }`}
               >
                 <Upload className="w-4 h-4" />
-                <span>ซิงค์ {evaluations.length} รายการทันที</span>
+                <span>{isSyncing ? 'กำลังส่งข้อมูล (POST)...' : `ส่งข้อมูลไปชีต (POST fetch) (${evaluations.length} รายการ)`}</span>
               </button>
 
               <button
@@ -266,15 +384,50 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
                   : 'bg-rose-950/60 border-rose-800 text-rose-300'
               }`}
             >
-              {testResult.success ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+              {testResult.success ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
               <span>{testResult.msg}</span>
             </div>
           )}
 
           {syncStatus && (
             <div className="p-3 rounded-xl bg-cyan-950/60 border border-cyan-800 text-cyan-300 text-xs flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+              <RefreshCw className="w-4 h-4 animate-spin text-cyan-400 flex-shrink-0" />
               <span>{syncStatus}</span>
+            </div>
+          )}
+
+          {/* HTTP fetch() Telemetry & Inspector */}
+          {lastFetchResult && (
+            <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                      lastFetchResult.method === 'GET'
+                        ? 'bg-blue-950 text-blue-300 border border-blue-800'
+                        : lastFetchResult.method === 'POST'
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        : 'bg-purple-950 text-purple-300 border border-purple-800'
+                    }`}
+                  >
+                    fetch() {lastFetchResult.method}
+                  </span>
+                  <span className="font-semibold text-slate-300">{lastFetchResult.message}</span>
+                </div>
+                {lastFetchResult.latencyMs !== undefined && (
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    ⚡ {lastFetchResult.latencyMs} ms
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] font-mono text-slate-400 truncate">
+                Target: {webAppUrl}
+              </div>
+              {lastFetchResult.details && (
+                <pre className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-cyan-300 overflow-x-auto max-h-32">
+                  {JSON.stringify(lastFetchResult.details, null, 2)}
+                </pre>
+              )}
             </div>
           )}
         </div>

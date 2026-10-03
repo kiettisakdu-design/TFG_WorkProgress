@@ -13,6 +13,7 @@ import {
   Lock,
   X,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -21,6 +22,8 @@ interface NavbarProps {
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
   pendingQueueCount: number;
+  onSyncSheet?: () => void;
+  isSyncingSheet?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +32,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentRole,
   setCurrentRole,
   pendingQueueCount,
+  onSyncSheet,
+  isSyncingSheet,
 }) => {
   const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
   const [adminPasscode, setAdminPasscode] = useState('');
@@ -191,6 +196,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Admin</span>
                 </button>
               </div>
+
+              {/* Live Google Sheet Fetch Button */}
+              {onSyncSheet && (
+                <button
+                  onClick={onSyncSheet}
+                  disabled={isSyncingSheet}
+                  title="ดึงข้อมูลล่าสุดจาก Google Sheet ผ่าน fetch() GET"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800 text-emerald-300 text-xs font-semibold shadow-sm transition-all"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${isSyncingSheet ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">ดึงข้อมูล Sheet (GET)</span>
+                </button>
+              )}
             </div>
           </div>
 

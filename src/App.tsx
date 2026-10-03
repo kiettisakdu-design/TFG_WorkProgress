@@ -8,11 +8,18 @@ import { GoogleSheetHub } from './components/GoogleSheetHub';
 import { EvaluationRecord, AppSettings, UserRole } from './types';
 import { INITIAL_EVALUATIONS } from './utils/sampleData';
 import {
+  DEFAULT_GOOGLE_WEBAPP_URL,
+  fetchEvaluationsFromSheets,
+  saveEvaluationToSheets,
+  updateStatusInSheets,
+} from './utils/googleSheetsIntegration';
+import {
   Building2,
   HardHat,
   ShieldCheck,
   CheckCircle2,
   Info,
+  RefreshCw,
 } from 'lucide-react';
 
 const STORAGE_KEY_EVALUATIONS = 'shop_tfm_evaluations_v2';
@@ -28,9 +35,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   sCurveWeeks: 12,
   confidenceThreshold: 80,
-  googleSheetId: '',
-  googleWebAppUrl: '',
-  autoSyncToSheets: false,
+  googleSheetId: '1lmqQ3y7IPv0zB3tH_QoyFebMlZxflhfJ8nIhTM3NscY',
+  googleWebAppUrl: DEFAULT_GOOGLE_WEBAPP_URL,
+  autoSyncToSheets: true,
 };
 
 export default function App() {
@@ -75,11 +82,40 @@ export default function App() {
 
   // Toast / Notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'warn' } | null>(null);
+  const [isFetchingSheet, setIsFetchingSheet] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'info' | 'warn' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
+
+  // GET data from Google Apps Script Web App
+  const fetchFromGoogleSheet = async (showNotification: boolean = false) => {
+    if (!settings.googleWebAppUrl) return;
+    setIsFetchingSheet(true);
+    try {
+      const res = await fetchEvaluationsFromSheets(settings.googleWebAppUrl);
+      if (res.success && res.data && res.data.length > 0) {
+        setEvaluations(res.data);
+        if (showNotification) {
+          showToast(`ดึงข้อมูลสำเร็จจาก Google Sheet (${res.data.length} รายการ)`, 'success');
+        }
+      } else if (showNotification) {
+        showToast('เชื่อมต่อ Google Sheet แล้ว (ไม่พบแถวข้อมูลใหม่ หรือยังไม่ได้สร้างชีต)', 'info');
+      }
+    } catch (e: any) {
+      if (showNotification) {
+        showToast(`ดึงข้อมูลไม่สำเร็จ: ${e.message}`, 'warn');
+      }
+    } finally {
+      setIsFetchingSheet(false);
+    }
+  };
+
+  // On first mount, attempt to fetch from Google Sheet
+  useEffect(() => {
+    fetchFromGoogleSheet(false);
+  }, []);
 
   // Sync to local storage
   useEffect(() => {
@@ -106,7 +142,7 @@ export default function App() {
     }
   }, [currentRole]);
 
-  // Handle new evaluation completed in UploadView
+  // Handle new evaluation completed in UploadView (POST to Google Sheet)
   const handleEvaluationComplete = (newRecord: EvaluationRecord) => {
     setEvaluations((prev) => [newRecord, ...prev.filter((item) => item.id !== newRecord.id)]);
     if (newRecord.approval_status === 'APPROVED') {
@@ -114,9 +150,21 @@ export default function App() {
     } else {
       showToast(`ผลประเมิน ${newRecord.branch_name} ส่งเข้าคิวอนุมัติแล้ว (Confidence ${newRecord.confidence_score}% < ${settings.confidenceThreshold}%)`, 'info');
     }
+
+    // POST to Google Apps Script Web App
+    if (settings.autoSyncToSheets && settings.googleWebAppUrl) {
+      saveEvaluationToSheets(newRecord, settings.googleWebAppUrl)
+        .then((res) => {
+          if (res.success) {
+            console.log('Saved to Google Sheet successfully via POST fetch()');
+            showToast(`บันทึกโครงการ ${newRecord.branch_name} ลง Google Sheet สำเร็จ (POST 200 OK)`, 'success');
+          }
+        })
+        .catch((err) => console.warn('Could not post to Google Sheet:', err));
+    }
   };
 
-  // Approve queue item
+  // Approve queue item (POST updateStatus to Google Sheet)
   const handleApprove = (id: string, updatedFields?: Partial<EvaluationRecord>) => {
     setEvaluations((prev) =>
       prev.map((item) => {
@@ -133,6 +181,17 @@ export default function App() {
       })
     );
     showToast('อนุมัติผลประเมินโครงการและเผยแพร่สู่ Dashboard แล้ว', 'success');
+
+    // POST updateStatus to Google Apps Script Web App
+    if (settings.autoSyncToSheets && settings.googleWebAppUrl) {
+      updateStatusInSheets(id, 'APPROVED', settings.googleWebAppUrl)
+        .then((res) => {
+          if (res.success) {
+            console.log('Approval status updated in Google Sheet');
+          }
+        })
+        .catch((err) => console.warn('Could not update status in Google Sheet:', err));
+    }
   };
 
   // Reject queue item
@@ -164,6 +223,8 @@ export default function App() {
         currentRole={currentRole}
         setCurrentRole={setCurrentRole}
         pendingQueueCount={pendingCount}
+        onSyncSheet={() => fetchFromGoogleSheet(true)}
+        isSyncingSheet={isFetchingSheet}
       />
 
       {/* Toast Notification */}

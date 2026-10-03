@@ -84,39 +84,47 @@ function doGet(e) {
   try {
     const action = (e && e.parameter && e.parameter.action) || 'webpage';
 
-    // ถ้าเรียก API ข้อมูล JSON
-    if (action === 'getData' || action === 'getAll') {
+    // ถ้าเรียก API ข้อมูล JSON ผ่าน fetch() หรือมี parameter ?action=getData / ?action=getAll
+    if (action === 'getData' || action === 'getAll' || action === 'sync' || (e && e.parameter && e.parameter.format === 'json')) {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
-      const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+      if (!ss) return createJsonResponse({ success: false, error: 'Spreadsheet not found' });
+
+      let evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
       if (!evalSheet) {
-        return createJsonResponse({ success: false, error: 'Database not initialized' });
+        setupTFMDatabase();
+        evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
       }
-      const data = evalSheet.getDataRange().getValues();
+
+      const data = evalSheet ? evalSheet.getDataRange().getValues() : [];
+      if (!data || data.length <= 1) {
+        return createJsonResponse({ success: true, count: 0, data: [] });
+      }
+
       const rows = data.slice(1);
       const evaluations = rows.map(r => ({
-        id: r[0],
-        branch_name: r[1],
-        evaluated_date: r[2],
-        delivery_date: r[3],
+        id: String(r[0] || ''),
+        branch_name: String(r[1] || ''),
+        evaluated_date: String(r[2] || ''),
+        delivery_date: String(r[3] || ''),
         total_weeks: Number(r[4]) || 12,
         current_week_index: Number(r[5]) || 0,
-        province: r[6],
-        contractor: r[7],
-        supervisor: r[8],
-        confidence_score: Number(r[9]),
+        province: String(r[6] || ''),
+        contractor: String(r[7] || ''),
+        supervisor: String(r[8] || ''),
+        confidence_score: Number(r[9]) || 80,
         category_scores: {
-          front_facade: Number(r[10]),
-          interior: Number(r[11]),
-          rear_building: Number(r[12]),
-          parking_area: Number(r[13])
+          front_facade: Number(r[10]) || 0,
+          interior: Number(r[11]) || 0,
+          rear_building: Number(r[12]) || 0,
+          parking_area: Number(r[13]) || 0
         },
-        calculated_actual_progress: Number(r[14]),
-        baseline_plan_progress: Number(r[15]),
-        variance_diff: Number(r[16]),
-        status_flag: r[17],
-        approval_status: r[18],
-        summary_reasoning: r[19],
-        created_at: r[20]
+        calculated_actual_progress: Number(r[14]) || 0,
+        baseline_plan_progress: Number(r[15]) || 0,
+        variance_diff: Number(r[16]) || 0,
+        status_flag: String(r[17] || 'ON_TRACK'),
+        approval_status: String(r[18] || 'PENDING_APPROVAL'),
+        summary_reasoning: String(r[19] || ''),
+        created_at: String(r[20] || new Date().toISOString())
       }));
       return createJsonResponse({ success: true, count: evaluations.length, data: evaluations });
     }
@@ -131,48 +139,60 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   } catch (err) {
-    return HtmlService.createHtmlOutput('<h3>Error: ' + err.toString() + '</h3>');
+    return createJsonResponse({ success: false, error: err.toString() });
   }
 }
 
 /**
  * 3. WEB APP POST REQUEST (doPost)
- * รองรับการบันทึกข้อมูลโครงการและการอนุมัติ
+ * รองรับการบันทึกข้อมูลโครงการและการอนุมัติด้วย fetch(url, { method: 'POST' })
  */
 function doPost(e) {
   try {
-    const postData = JSON.parse(e.postData.contents);
+    let postData = {};
+    if (e && e.postData && e.postData.contents) {
+      try {
+        postData = JSON.parse(e.postData.contents);
+      } catch (jsonErr) {
+        postData = { action: 'raw', contents: e.postData.contents };
+      }
+    } else if (e && e.parameter) {
+      postData = e.parameter;
+    }
+
     const action = postData.action || 'addEvaluation';
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+    if (!ss) return createJsonResponse({ success: false, error: 'Spreadsheet not found' });
 
+    let evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
     if (!evalSheet) {
-      return createJsonResponse({ success: false, error: 'Database sheet not initialized' });
+      setupTFMDatabase();
+      evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
     }
 
     if (action === 'addEvaluation') {
-      const rec = postData.data;
+      const rec = postData.data || postData.payload || postData;
       const row = [
         rec.id || ('TFM-' + Utilities.formatDate(new Date(), 'GMT+7', 'yyyyMMdd-HHmmss')),
-        rec.branch_name,
-        rec.evaluated_date,
-        rec.delivery_date,
+        rec.branch_name || 'สาขาใหม่',
+        rec.evaluated_date || Utilities.formatDate(new Date(), 'GMT+7', 'yyyy-MM-dd'),
+        rec.delivery_date || '',
         rec.total_weeks || 12,
         rec.current_week_index || 0,
-        rec.province,
-        rec.contractor,
-        rec.supervisor,
-        rec.confidence_score,
-        rec.category_scores.front_facade,
-        rec.category_scores.interior,
-        rec.category_scores.rear_building,
-        rec.category_scores.parking_area,
-        rec.calculated_actual_progress,
-        rec.baseline_plan_progress,
-        rec.variance_diff,
-        rec.status_flag,
+        rec.province || '',
+        rec.contractor || '',
+        rec.supervisor || '',
+        rec.confidence_score ?? 85,
+        rec.category_scores?.front_facade ?? 0,
+        rec.category_scores?.interior ?? 0,
+        rec.category_scores?.rear_building ?? 0,
+        rec.category_scores?.parking_area ?? 0,
+        rec.calculated_actual_progress ?? 0,
+        rec.baseline_plan_progress ?? 0,
+        rec.variance_diff ?? 0,
+        rec.status_flag || 'ON_TRACK',
         rec.approval_status || 'PENDING_APPROVAL',
-        rec.summary_reasoning,
+        rec.summary_reasoning || '',
         rec.created_at || new Date().toISOString()
       ];
       evalSheet.appendRow(row);
@@ -180,7 +200,9 @@ function doPost(e) {
     }
 
     if (action === 'updateStatus') {
-      const { id, approval_status, approved_by } = postData.data;
+      const dataPayload = postData.data || postData.payload || {};
+      const id = dataPayload.id || postData.id;
+      const approval_status = dataPayload.approval_status || postData.approval_status || 'APPROVED';
       const data = evalSheet.getDataRange().getValues();
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] === id) {
@@ -189,6 +211,10 @@ function doPost(e) {
         }
       }
       return createJsonResponse({ success: false, error: 'Evaluation ID not found' });
+    }
+
+    if (action === 'ping') {
+      return createJsonResponse({ success: true, message: 'PONG from Google Apps Script', timestamp: new Date() });
     }
 
     return createJsonResponse({ success: true, message: 'Handled action: ' + action });
