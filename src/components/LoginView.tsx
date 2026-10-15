@@ -246,7 +246,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
                   </div>
                   <div>
                     <div className="text-xs font-bold text-amber-300 group-hover:text-amber-200">Contractor</div>
-                    <div className="text-[10px] text-slate-500">อัปโหลดภาพหน้างาน</div>
+                    <div className="text-[10px] text-slate-500">เฉพาะเมนู AI Upload</div>
                   </div>
                 </button>
               </div>

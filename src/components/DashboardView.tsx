@@ -348,10 +348,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <AIMascot diff={currentRecord.variance_diff} size="lg" showDetails={true} />
 
               {/* Quick Status Legend Help */}
-              <div className="mt-4 pt-3 border-t border-slate-800/80 w-full text-[11px] text-slate-400 text-center space-y-1">
-                <div>ระดับวิกฤต: {currentRecord.status_flag}</div>
-                <div className="text-[10px] text-slate-500">
-                  เกณฑ์: เร็วกว่าแผน (≥+5%) • ตามแผน (-5% ถึง +5%) • เฝ้าระวัง (-15% ถึง -5%) • วิกฤต (&lt;-15%)
+              <div className="mt-4 pt-3 border-t border-slate-800/80 w-full text-[11px] text-slate-400 space-y-1.5">
+                <div className="flex items-center justify-between text-slate-300 font-semibold text-xs">
+                  <span>สถานะปัจจุบัน:</span>
+                  <span className="font-mono text-cyan-400">{currentRecord.status_flag} ({currentRecord.variance_diff >= 0 ? '+' : ''}{currentRecord.variance_diff.toFixed(1)}%)</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px] text-left pt-1">
+                  <div className="bg-emerald-950/40 border border-emerald-900/60 p-1.5 rounded-lg text-emerald-300">
+                    <span className="font-bold">≥ +5%:</span> ถ้วยรางวัลสีทอง + ออร่า Emerald
+                  </div>
+                  <div className="bg-sky-950/40 border border-sky-900/60 p-1.5 rounded-lg text-sky-300">
+                    <span className="font-bold">-5% ถึง +5%:</span> ยืนกอดอก + แท็บเล็ต Blueprint
+                  </div>
+                  <div className="bg-amber-950/40 border border-amber-900/60 p-1.5 rounded-lg text-amber-300">
+                    <span className="font-bold">-15% ถึง -5%:</span> กล้อง Cyber เลนส์อำพัน + ป้ายเตือน
+                  </div>
+                  <div className="bg-rose-950/40 border border-rose-900/60 p-1.5 rounded-lg text-rose-300">
+                    <span className="font-bold">&lt; -15%:</span> ธงแดงแหลมคม + คลื่นเตือนภัย
+                  </div>
                 </div>
               </div>
             </div>

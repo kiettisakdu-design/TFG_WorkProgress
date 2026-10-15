@@ -36,6 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSyncSheet,
   isSyncingSheet,
 }) => {
+  const isContractor = currentRole === 'CONTRACTOR';
+
   const getRoleBadge = (role: UserRole) => {
     switch (role) {
       case 'ADMIN':
@@ -68,7 +70,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand */}
           <div
             className="flex items-center gap-3 cursor-pointer group"
-            onClick={() => setCurrentTab('dashboard')}
+            onClick={() => setCurrentTab(isContractor ? 'upload' : 'dashboard')}
+            title={isContractor ? 'หน้า AI Upload ของผู้รับเหมา' : 'ไปที่ Dashboard ภาพรวม'}
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-white font-bold text-lg group-hover:scale-105 transition-transform">
               <Building2 className="w-6 h-6" />
@@ -86,61 +89,77 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs - Strict RBAC: User ผู้รับเหมา ให้สามารถเข้าหน้า เมนู ได้เฉพาะหน้า Ai upload เท่านั้น */}
           <nav className="hidden md:flex items-center gap-1 bg-slate-950/60 p-1 rounded-xl border border-slate-800">
-            <button
-              onClick={() => setCurrentTab('dashboard')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                currentTab === 'dashboard'
-                  ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard ภาพรวม</span>
-            </button>
+            {/* Dashboard: Restricted from Contractor */}
+            {!isContractor && (
+              <button
+                onClick={() => setCurrentTab('dashboard')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  currentTab === 'dashboard'
+                    ? 'bg-cyan-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Dashboard ภาพรวม</span>
+              </button>
+            )}
 
+            {/* AI Upload: Accessible by Contractor and all roles */}
             <button
               onClick={() => setCurrentTab('upload')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 currentTab === 'upload'
-                  ? 'bg-cyan-600 text-white shadow-md'
+                  ? 'bg-cyan-600 text-white shadow-md font-semibold'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <UploadCloud className="w-4 h-4" />
               <span>AI Upload</span>
-            </button>
-
-            <button
-              onClick={() => setCurrentTab('queue')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${
-                currentTab === 'queue'
-                  ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <CheckSquare className="w-4 h-4" />
-              <span>คิวอนุมัติ AI</span>
-              {pendingQueueCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold">
-                  {pendingQueueCount}
+              {isContractor && (
+                <span className="ml-1 px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 text-[10px] font-mono border border-cyan-800">
+                  เฉพาะเมนูนี้
                 </span>
               )}
             </button>
 
-            <button
-              onClick={() => setCurrentTab('sheets')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                currentTab === 'sheets'
-                  ? 'bg-emerald-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-              }`}
-            >
-              <Sheet className="w-4 h-4 text-emerald-400" />
-              <span>Google Sheet DB</span>
-            </button>
+            {/* Approval Queue: Restricted from Contractor */}
+            {!isContractor && (
+              <button
+                onClick={() => setCurrentTab('queue')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all relative ${
+                  currentTab === 'queue'
+                    ? 'bg-cyan-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <CheckSquare className="w-4 h-4" />
+                <span>คิวอนุมัติ AI</span>
+                {pendingQueueCount > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-bold">
+                    {pendingQueueCount}
+                  </span>
+                )}
+              </button>
+            )}
 
+            {/* Google Sheets DB Hub: Restricted from Contractor */}
+            {!isContractor && (
+              <button
+                onClick={() => setCurrentTab('sheets')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  currentTab === 'sheets'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                }`}
+              >
+                <Sheet className="w-4 h-4 text-emerald-400" />
+                <span>Google Sheet DB</span>
+              </button>
+            )}
+
+            {/* Settings & User Management: Only Admin */}
             {currentRole === 'ADMIN' && (
               <button
                 onClick={() => setCurrentTab('settings')}
@@ -158,8 +177,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Header: Logged-in User Info & Logout (No public role switch buttons) */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Live Google Sheet Fetch Button */}
-            {onSyncSheet && (
+            {/* Live Google Sheet Fetch Button (Only for Admin / Supervisor) */}
+            {!isContractor && onSyncSheet && (
               <button
                 onClick={onSyncSheet}
                 disabled={isSyncingSheet}
@@ -187,7 +206,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${roleInfo.bg}`}
                       >
                         {roleInfo.icon}
-                        <span>{currentRole}</span>
+                        <span>{roleInfo.label.split(' ')[0]}</span>
                       </span>
                     </div>
                   </div>
@@ -207,32 +226,44 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Mobile Navigation bar */}
+        {/* Mobile Navigation bar: Enforcing Contractor only gets Upload */}
         <div className="flex md:hidden items-center justify-around py-2 border-t border-slate-800/80 text-xs">
-          <button
-            onClick={() => setCurrentTab('dashboard')}
-            className={`p-1.5 rounded-lg ${currentTab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}
-          >
-            Dashboard
-          </button>
+          {!isContractor && (
+            <button
+              onClick={() => setCurrentTab('dashboard')}
+              className={`p-1.5 rounded-lg ${currentTab === 'dashboard' ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}
+            >
+              Dashboard
+            </button>
+          )}
+
           <button
             onClick={() => setCurrentTab('upload')}
-            className={`p-1.5 rounded-lg ${currentTab === 'upload' ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}
+            className={`p-1.5 rounded-lg ${
+              currentTab === 'upload' ? 'text-cyan-400 font-bold' : 'text-slate-400'
+            }`}
           >
-            Upload
+            AI Upload {isContractor && '(เฉพาะเมนูนี้)'}
           </button>
-          <button
-            onClick={() => setCurrentTab('queue')}
-            className={`p-1.5 rounded-lg relative ${currentTab === 'queue' ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}
-          >
-            Queue {pendingQueueCount > 0 && `(${pendingQueueCount})`}
-          </button>
-          <button
-            onClick={() => setCurrentTab('sheets')}
-            className={`p-1.5 rounded-lg ${currentTab === 'sheets' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
-          >
-            Sheets DB
-          </button>
+
+          {!isContractor && (
+            <button
+              onClick={() => setCurrentTab('queue')}
+              className={`p-1.5 rounded-lg relative ${currentTab === 'queue' ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}
+            >
+              Queue {pendingQueueCount > 0 && `(${pendingQueueCount})`}
+            </button>
+          )}
+
+          {!isContractor && (
+            <button
+              onClick={() => setCurrentTab('sheets')}
+              className={`p-1.5 rounded-lg ${currentTab === 'sheets' ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}
+            >
+              Sheets DB
+            </button>
+          )}
+
           {currentRole === 'ADMIN' && (
             <button
               onClick={() => setCurrentTab('settings')}

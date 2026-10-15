@@ -82,8 +82,18 @@ export default function App() {
     return DEFAULT_SETTINGS;
   });
 
-  // Navigation tab
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'upload' | 'queue' | 'settings' | 'sheets'>('dashboard');
+  // Navigation tab (Contractor default to 'upload')
+  const [currentTab, setCurrentTab] = useState<'dashboard' | 'upload' | 'queue' | 'settings' | 'sheets'>(() => {
+    const user = getStoredCurrentUser();
+    return user?.role === 'CONTRACTOR' ? 'upload' : 'dashboard';
+  });
+
+  // Strict RBAC: Force contractor to only ever be on 'upload'
+  useEffect(() => {
+    if (currentRole === 'CONTRACTOR' && currentTab !== 'upload') {
+      setCurrentTab('upload');
+    }
+  }, [currentRole, currentTab]);
 
   // Active target evaluation ID to focus on dashboard
   const [targetEvalId, setTargetEvalId] = useState<string>('');
@@ -102,6 +112,11 @@ export default function App() {
     setCurrentUser(user);
     setStoredCurrentUser(user);
     setUsers(getStoredUsers());
+    if (user.role === 'CONTRACTOR') {
+      setCurrentTab('upload');
+    } else {
+      setCurrentTab('dashboard');
+    }
     showToast(`ยินดีต้อนรับ ${user.displayName} เข้าสู่ระบบ (บทบาท: ${user.role})`, 'success');
   };
 
@@ -321,68 +336,79 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
+      {/* Main Content Area: Enforce Contractor only accesses AI upload */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {currentTab === 'dashboard' && (
-          <DashboardView
-            evaluations={evaluations.filter((i) => i.approval_status === 'APPROVED' || currentRole !== 'CONTRACTOR')}
-            settings={settings}
-            onNavigateUpload={() => setCurrentTab('upload')}
-          />
-        )}
-
-        {currentTab === 'upload' && (
+        {currentRole === 'CONTRACTOR' ? (
           <UploadView
             settings={settings}
             onEvaluationComplete={handleEvaluationComplete}
-            onNavigateDashboard={() => setCurrentTab('dashboard')}
+            canNavigateDashboard={false}
           />
-        )}
+        ) : (
+          <>
+            {currentTab === 'dashboard' && (
+              <DashboardView
+                evaluations={evaluations}
+                settings={settings}
+                onNavigateUpload={() => setCurrentTab('upload')}
+              />
+            )}
 
-        {currentTab === 'queue' && (
-          <ApprovalQueueView
-            evaluations={evaluations}
-            currentRole={currentRole}
-            settings={settings}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onViewInDashboard={(id) => {
-              setTargetEvalId(id);
-              setCurrentTab('dashboard');
-            }}
-          />
-        )}
+            {currentTab === 'upload' && (
+              <UploadView
+                settings={settings}
+                onEvaluationComplete={handleEvaluationComplete}
+                onNavigateDashboard={() => setCurrentTab('dashboard')}
+                canNavigateDashboard={true}
+              />
+            )}
 
-        {currentTab === 'settings' && (
-          <SettingsView
-            settings={settings}
-            currentRole={currentRole}
-            currentUser={currentUser}
-            users={users}
-            onSaveSettings={(newSettings) => {
-              setSettings(newSettings);
-              showToast('บันทึกการตั้งค่าระบบเรียบร้อยแล้ว', 'success');
-            }}
-            onUpdateUserRole={handleUpdateUserRole}
-            onAddUser={handleAddUser}
-            onEditUser={handleEditUser}
-            onDeleteUser={handleDeleteUser}
-          />
-        )}
+            {currentTab === 'queue' && (
+              <ApprovalQueueView
+                evaluations={evaluations}
+                currentRole={currentRole}
+                settings={settings}
+                onApprove={handleApprove}
+                onReject={handleReject}
+                onViewInDashboard={(id) => {
+                  setTargetEvalId(id);
+                  setCurrentTab('dashboard');
+                }}
+              />
+            )}
 
-        {currentTab === 'sheets' && (
-          <GoogleSheetHub
-            settings={settings}
-            evaluations={evaluations}
-            onSaveSettings={(newSettings) => {
-              setSettings(newSettings);
-              showToast('บันทึกการเชื่อมต่อ Google Sheets แล้ว', 'success');
-            }}
-            onImportEvaluations={(imported) => {
-              setEvaluations(imported);
-              showToast(`นำเข้าข้อมูลจาก Google Sheets สำเร็จ (${imported.length} รายการ)`, 'success');
-            }}
-          />
+            {currentTab === 'settings' && currentRole === 'ADMIN' && (
+              <SettingsView
+                settings={settings}
+                currentRole={currentRole}
+                currentUser={currentUser}
+                users={users}
+                onSaveSettings={(newSettings) => {
+                  setSettings(newSettings);
+                  showToast('บันทึกการตั้งค่าระบบเรียบร้อยแล้ว', 'success');
+                }}
+                onUpdateUserRole={handleUpdateUserRole}
+                onAddUser={handleAddUser}
+                onEditUser={handleEditUser}
+                onDeleteUser={handleDeleteUser}
+              />
+            )}
+
+            {currentTab === 'sheets' && (
+              <GoogleSheetHub
+                settings={settings}
+                evaluations={evaluations}
+                onSaveSettings={(newSettings) => {
+                  setSettings(newSettings);
+                  showToast('บันทึกการเชื่อมต่อ Google Sheets แล้ว', 'success');
+                }}
+                onImportEvaluations={(imported) => {
+                  setEvaluations(imported);
+                  showToast(`นำเข้าข้อมูลจาก Google Sheets สำเร็จ (${imported.length} รายการ)`, 'success');
+                }}
+              />
+            )}
+          </>
         )}
       </main>
 

@@ -29,7 +29,8 @@ import {
 interface UploadViewProps {
   settings: AppSettings;
   onEvaluationComplete: (newRecord: EvaluationRecord) => void;
-  onNavigateDashboard: () => void;
+  onNavigateDashboard?: () => void;
+  canNavigateDashboard?: boolean;
 }
 
 const PHOTO_FIELDS = [
@@ -71,6 +72,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
   settings,
   onEvaluationComplete,
   onNavigateDashboard,
+  canNavigateDashboard = true,
 }) => {
   // Photos state
   const [photos, setPhotos] = useState<PhotoData>({});
@@ -645,13 +647,20 @@ export const UploadView: React.FC<UploadViewProps> = ({
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={onNavigateDashboard}
-                className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5"
-              >
-                <span>ดูใน Dashboard และกราฟ S-Curve</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              {canNavigateDashboard && onNavigateDashboard ? (
+                <button
+                  onClick={onNavigateDashboard}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5"
+                >
+                  <span>ดูใน Dashboard และกราฟ S-Curve</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              ) : (
+                <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>บันทึกผลงานสำเร็จ (ผู้รับเหมา)</span>
+                </div>
+              )}
             </div>
           </div>
 
