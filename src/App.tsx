@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
+import { LoginView } from './components/LoginView';
 import { DashboardView } from './components/DashboardView';
 import { UploadView } from './components/UploadView';
 import { ApprovalQueueView } from './components/ApprovalQueueView';
 import { SettingsView } from './components/SettingsView';
 import { GoogleSheetHub } from './components/GoogleSheetHub';
-import { EvaluationRecord, AppSettings, UserRole } from './types';
+import { EvaluationRecord, AppSettings, UserRole, UserAccount } from './types';
 import { INITIAL_EVALUATIONS } from './utils/sampleData';
 import {
   DEFAULT_GOOGLE_WEBAPP_URL,
@@ -14,17 +15,22 @@ import {
   updateStatusInSheets,
 } from './utils/googleSheetsIntegration';
 import {
+  getStoredCurrentUser,
+  setStoredCurrentUser,
+  getStoredUsers,
+  updateUserRole,
+  createNewUser,
+  updateUserDetails,
+  deleteUserAccount,
+} from './utils/auth';
+import {
   Building2,
-  HardHat,
-  ShieldCheck,
   CheckCircle2,
   Info,
-  RefreshCw,
 } from 'lucide-react';
 
 const STORAGE_KEY_EVALUATIONS = 'shop_tfm_evaluations_v2';
 const STORAGE_KEY_SETTINGS = 'shop_tfm_settings_v2';
-const STORAGE_KEY_ROLE = 'shop_tfm_role_v2';
 
 const DEFAULT_SETTINGS: AppSettings = {
   weights: {
@@ -41,6 +47,19 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export default function App() {
+  // Current logged in user (null = show Login screen)
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    return getStoredCurrentUser();
+  });
+
+  // All registered users (managed by Admin in Settings)
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    return getStoredUsers();
+  });
+
+  // Effective role derived from currentUser (or fallback 'CONTRACTOR')
+  const currentRole: UserRole = currentUser ? currentUser.role : 'CONTRACTOR';
+
   // Evaluations state (persisted)
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>(() => {
     try {
@@ -63,17 +82,6 @@ export default function App() {
     return DEFAULT_SETTINGS;
   });
 
-  // Role state (persisted)
-  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_ROLE);
-      if (saved) return saved as UserRole;
-    } catch (e) {
-      console.error(e);
-    }
-    return 'ADMIN';
-  });
-
   // Navigation tab
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'upload' | 'queue' | 'settings' | 'sheets'>('dashboard');
 
@@ -87,6 +95,76 @@ export default function App() {
   const showToast = (message: string, type: 'success' | 'info' | 'warn' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  // Login handler
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUser(user);
+    setStoredCurrentUser(user);
+    setUsers(getStoredUsers());
+    showToast(`ยินดีต้อนรับ ${user.displayName} เข้าสู่ระบบ (บทบาท: ${user.role})`, 'success');
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setStoredCurrentUser(null);
+    setCurrentUser(null);
+    setCurrentTab('dashboard');
+    showToast('ออกจากระบบเรียบร้อยแล้ว', 'info');
+  };
+
+  // Admin user management handlers (User Request 2)
+  const handleUpdateUserRole = (userId: string, newRole: UserRole) => {
+    const res = updateUserRole(userId, newRole);
+    if (res.success) {
+      setUsers(res.users);
+      // If current logged-in user role changed, sync currentUser state
+      if (currentUser && currentUser.id === userId) {
+        const updatedSelf = res.users.find((u) => u.id === userId);
+        if (updatedSelf) setCurrentUser(updatedSelf);
+      }
+      showToast(`เปลี่ยนบทบาทผู้ใช้เป็น ${newRole} สำเร็จ`, 'success');
+    } else {
+      showToast(res.error || 'ไม่สามารถเปลี่ยนบทบาทได้', 'warn');
+    }
+  };
+
+  const handleAddUser = (userData: {
+    username: string;
+    password?: string;
+    displayName: string;
+    role: UserRole;
+    email?: string;
+    department?: string;
+  }) => {
+    const res = createNewUser(userData);
+    if (res.success) {
+      setUsers(res.users);
+      showToast(`เพิ่มผู้ใช้ @${userData.username} เรียบร้อยแล้ว`, 'success');
+    }
+    return res;
+  };
+
+  const handleEditUser = (userId: string, data: Partial<UserAccount>) => {
+    const res = updateUserDetails(userId, data);
+    if (res.success) {
+      setUsers(res.users);
+      if (currentUser && currentUser.id === userId) {
+        const updatedSelf = res.users.find((u) => u.id === userId);
+        if (updatedSelf) setCurrentUser(updatedSelf);
+      }
+      showToast('บันทึกข้อมูลผู้ใช้เรียบร้อยแล้ว', 'success');
+    }
+    return res;
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    const res = deleteUserAccount(userId);
+    if (res.success) {
+      setUsers(res.users);
+      showToast('ลบผู้ใช้งานสำเร็จ', 'success');
+    }
+    return res;
   };
 
   // GET data from Google Apps Script Web App
@@ -134,14 +212,6 @@ export default function App() {
     }
   }, [settings]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ROLE, currentRole);
-    } catch (e) {
-      console.error(e);
-    }
-  }, [currentRole]);
-
   // Handle new evaluation completed in UploadView (POST to Google Sheet)
   const handleEvaluationComplete = (newRecord: EvaluationRecord) => {
     setEvaluations((prev) => [newRecord, ...prev.filter((item) => item.id !== newRecord.id)]);
@@ -173,7 +243,7 @@ export default function App() {
             ...item,
             ...updatedFields,
             approval_status: 'APPROVED',
-            approved_by: updatedFields?.approved_by || `${currentRole} (${new Date().toLocaleTimeString('th-TH')})`,
+            approved_by: updatedFields?.approved_by || `${currentUser?.displayName || currentRole} (${new Date().toLocaleTimeString('th-TH')})`,
             approved_at: new Date().toISOString(),
           };
         }
@@ -214,14 +284,20 @@ export default function App() {
   // Count pending items for badge
   const pendingCount = evaluations.filter((item) => item.approval_status === 'PENDING_APPROVAL').length;
 
+  // If user is not logged in, render the Login Screen
+  if (!currentUser) {
+    return <LoginView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-white">
       {/* Top Navigation */}
       <Navbar
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
+        currentUser={currentUser}
         currentRole={currentRole}
-        setCurrentRole={setCurrentRole}
+        onLogout={handleLogout}
         pendingQueueCount={pendingCount}
         onSyncSheet={() => fetchFromGoogleSheet(true)}
         isSyncingSheet={isFetchingSheet}
@@ -281,19 +357,16 @@ export default function App() {
           <SettingsView
             settings={settings}
             currentRole={currentRole}
+            currentUser={currentUser}
+            users={users}
             onSaveSettings={(newSettings) => {
               setSettings(newSettings);
               showToast('บันทึกการตั้งค่าระบบเรียบร้อยแล้ว', 'success');
             }}
-            onAuthenticateAdmin={() => {
-              const pass = window.prompt('กรุณากรอกรหัสผ่าน Admin:');
-              if (pass === '112224') {
-                setCurrentRole('ADMIN');
-                showToast('เข้าสู่ระบบสิทธิ์ Admin สำเร็จ', 'success');
-              } else if (pass !== null) {
-                showToast('รหัสผ่านไม่ถูกต้อง', 'warn');
-              }
-            }}
+            onUpdateUserRole={handleUpdateUserRole}
+            onAddUser={handleAddUser}
+            onEditUser={handleEditUser}
+            onDeleteUser={handleDeleteUser}
           />
         )}
 
@@ -325,7 +398,7 @@ export default function App() {
           <div className="flex items-center gap-4 text-[11px]">
             <span>ระบบปัญญาประดิษฐ์ AI Vision ร่วมกับ Google Sheets Database</span>
             <span>•</span>
-            <span className="text-cyan-400">Google Apps Script Ready</span>
+            <span className="text-cyan-400">Minimalist Geometric Mascot & Role-Based Auth</span>
           </div>
         </div>
       </footer>

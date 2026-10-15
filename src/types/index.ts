@@ -1,5 +1,19 @@
 export type UserRole = 'ADMIN' | 'SUPERVISOR' | 'CONTRACTOR';
 
+export interface UserAccount {
+  id: string;
+  username: string;
+  password?: string;
+  displayName: string;
+  role: UserRole;
+  email?: string;
+  department?: string;
+  avatarSeed?: string;
+  isActive: boolean;
+  createdAt: string;
+  lastLogin?: string;
+}
+
 export interface PhotoCategoryWeights {
   front: number; // default 30%
   interior: number; // default 40%
