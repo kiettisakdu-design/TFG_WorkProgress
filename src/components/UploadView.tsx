@@ -12,6 +12,7 @@ import {
   PROVINCES_LIST,
   CONTRACTORS_LIST,
 } from '../utils/sampleData';
+import { compressImageFile } from '../utils/imageCompressor';
 import {
   UploadCloud,
   Camera,
@@ -103,17 +104,31 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const [analysisStep, setAnalysisStep] = useState('');
   const [evaluationResult, setEvaluationResult] = useState<EvaluationRecord | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [compressingKey, setCompressingKey] = useState<keyof PhotoData | null>(null);
 
-  // Handle single photo upload
-  const handlePhotoUpload = (key: keyof PhotoData, file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
+  // Handle single photo upload with automated client-side downscaling and compression
+  const handlePhotoUpload = async (key: keyof PhotoData, file: File) => {
+    try {
+      setCompressingKey(key);
+      setErrorMsg('');
+      const compressed = await compressImageFile(file, 1280, 0.82);
       setPhotos((prev) => ({
         ...prev,
-        [key]: e.target?.result as string,
+        [key]: compressed.dataUrl,
       }));
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.warn('Auto compression fell back to reader:', err);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPhotos((prev) => ({
+          ...prev,
+          [key]: e.target?.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setCompressingKey(null);
+    }
   };
 
   // Load Presets for rapid demo
@@ -201,9 +216,41 @@ export const UploadView: React.FC<UploadViewProps> = ({
       });
 
       setAnalysisStep('3/4 คำนวณความคืบหน้ารวมแบบถ่วงน้ำหนัก และเปรียบเทียบกับ Baseline Plan...');
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 400));
 
-      const result = await response.json();
+      // Safe HTTP response parsing to prevent "Unexpected token 'T', 'The page c...' is not valid JSON"
+      const contentType = response.headers.get('content-type') || '';
+      let result: any = null;
+
+      if (contentType.includes('application/json')) {
+        try {
+          result = await response.json();
+        } catch (jsonErr) {
+          console.error('JSON parse error from evaluate response:', jsonErr);
+        }
+      }
+
+      if (!response.ok || !result) {
+        let cleanError = '';
+        if (response.status === 413) {
+          cleanError = 'ขนาดไฟล์ภาพหรือข้อมูลที่ส่งใหญ่เกินขีดจำกัด (HTTP 413 Payload Too Large) ระบบบีบอัดรูปภาพให้อัตโนมัติแล้ว กรุณาลองอัปโหลดใหม่อีกครั้ง';
+        } else if (response.status === 502 || response.status === 503 || response.status === 504) {
+          cleanError = `เกตเวย์หรือระบบเซิร์ฟเวอร์ใช้เวลาตอบกลับนานเกินไป (HTTP ${response.status}) กรุณากดลองอีกครั้ง`;
+        } else {
+          try {
+            const rawText = await response.text();
+            if (rawText.includes('The page') || rawText.includes('<!DOCTYPE') || rawText.includes('<html')) {
+              cleanError = `เซิร์ฟเวอร์ตอบกลับด้วยหน้าเว็บข้อผิดพลาด (HTTP ${response.status}) แทนที่ข้อมูลการวิเคราะห์ AI`;
+            } else {
+              cleanError = rawText.slice(0, 160);
+            }
+          } catch {
+            cleanError = `การเชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ (HTTP ${response.status})`;
+          }
+        }
+
+        throw new Error(result?.error || cleanError || `การประเมินผลล้มเหลว (HTTP ${response.status})`);
+      }
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Evaluation returned unsuccessful response');
@@ -349,7 +396,13 @@ export const UploadView: React.FC<UploadViewProps> = ({
 
                 {/* Upload Slot / Image Preview */}
                 <div className="relative aspect-[4/3] bg-slate-950 flex flex-col items-center justify-center p-3 text-center group">
-                  {hasPhoto ? (
+                  {compressingKey === cat.key ? (
+                    <div className="flex flex-col items-center justify-center gap-2 p-4 text-cyan-400">
+                      <RefreshCw className="w-6 h-6 animate-spin text-cyan-400" />
+                      <span className="text-xs font-medium">กำลังบีบอัดและปรับขนาดรูปภาพ...</span>
+                      <span className="text-[10px] text-slate-400">ปรับให้เหมาะกับการประมวลผล AI</span>
+                    </div>
+                  ) : hasPhoto ? (
                     <>
                       <img
                         src={photos[cat.key]}
@@ -382,7 +435,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
                     <label className="w-full h-full border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-colors p-4">
                       <ImageIcon className="w-8 h-8 text-slate-500 mb-2 group-hover:text-cyan-400 transition-colors" />
                       <span className="text-xs font-medium text-slate-300">คลิกเพื่ออัปโหลด</span>
-                      <span className="text-[10px] text-slate-500 mt-1">PNG, JPG หรือลากไฟล์มาวาง</span>
+                      <span className="text-[10px] text-slate-500 mt-1">PNG, JPG (บีบอัดอัตโนมัติ)</span>
                       <input
                         type="file"
                         accept="image/*"

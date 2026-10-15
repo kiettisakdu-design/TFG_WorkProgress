@@ -102,10 +102,15 @@ export const GoogleSheetHub: React.FC<GoogleSheetHubProps> = ({
           action: 'ping',
         }),
       });
-      const data = await res.json();
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        // response was not JSON
+      }
       const elapsed = Math.round(performance.now() - startTime);
 
-      if (data.success) {
+      if (res.ok && data?.success) {
         setTestResult({
           success: true,
           msg: `เชื่อมต่อสำเร็จ! (Response ${elapsed}ms) Google Apps Script พร้อมทำงาน`,

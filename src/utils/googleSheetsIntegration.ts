@@ -362,9 +362,14 @@ export async function fetchEvaluationsFromSheets(webAppUrl: string = DEFAULT_GOO
     // 2. Second attempt: Fetch via server proxy (which runs fetch() on the Node server)
     const proxyUrl = `/api/sheets-fetch?webAppUrl=${encodeURIComponent(webAppUrl)}&action=getData&_t=${Date.now()}`;
     const proxyRes = await fetch(proxyUrl, { method: 'GET' });
-    const proxyJson = await proxyRes.json();
+    let proxyJson: any = null;
+    try {
+      proxyJson = await proxyRes.json();
+    } catch {
+      // response was not JSON
+    }
 
-    if (proxyJson.success) {
+    if (proxyRes.ok && proxyJson && proxyJson.success) {
       const { evaluations, isEmpty } = parseGoogleSheetsResponse(proxyJson.data);
       return {
         success: true,
@@ -377,7 +382,7 @@ export async function fetchEvaluationsFromSheets(webAppUrl: string = DEFAULT_GOO
 
     return {
       success: false,
-      error: proxyJson.error || 'Failed to fetch from Google Sheet',
+      error: proxyJson?.error || `เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (HTTP ${proxyRes.status})`,
     };
   } catch (err: any) {
     return {
@@ -447,13 +452,18 @@ export async function saveEvaluationToSheets(
         payload: record,
       }),
     });
-    const json = await res.json();
-    if (json.success) {
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch {
+      // response was not JSON
+    }
+    if (res.ok && json && json.success) {
       return { success: true, result: json.result, method: 'proxy_fetch_post' };
     } else {
       return {
         success: false,
-        error: json.error || directErrorMessage || 'Failed to sync with Google Sheet',
+        error: json?.error || directErrorMessage || `ไม่สามารถบันทึกไปยัง Google Sheet ได้ (HTTP ${res.status})`,
         method: 'proxy_fetch_post',
       };
     }
@@ -505,8 +515,13 @@ export async function updateStatusInSheets(
         payload: { id, approval_status },
       }),
     });
-    const json = await res.json();
-    return { success: json.success, result: json.result };
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch {
+      // response was not JSON
+    }
+    return { success: Boolean(res.ok && json?.success), result: json?.result, error: json?.error || (res.ok ? undefined : `HTTP ${res.status}`) };
   } catch (err: any) {
     return { success: false, error: err.message || 'Failed to update status in Google Sheet' };
   }

@@ -351,6 +351,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Global API error handler (catches PayloadTooLargeError and unhandled API exceptions)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (req.path.startsWith('/api/')) {
+    console.error('API Error intercepted:', err.message || err);
+    const isPayloadTooLarge = err.type === 'entity.too.large' || err.status === 413;
+    return res.status(isPayloadTooLarge ? 413 : (err.status || 500)).json({
+      success: false,
+      error: isPayloadTooLarge
+        ? 'ขนาดข้อมูลรูปภาพรวมเกินขีดจำกัด (Payload Too Large) กรุณารีเฟรชเพื่อใช้ระบบบีบอัดรูปภาพอัตโนมัติ'
+        : (err.message || 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์'),
+    });
+  }
+  next(err);
+});
+
 async function startServer() {
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, 'dist')));
