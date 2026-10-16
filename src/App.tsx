@@ -301,6 +301,13 @@ export default function App() {
     showToast('ส่งกลับแก้ไขรายการเรียบร้อยแล้ว', 'warn');
   };
 
+  // Delete approved (or any) evaluation record (Admin feature as requested)
+  const handleDeleteEvaluation = (id: string) => {
+    const target = evaluations.find((item) => item.id === id);
+    setEvaluations((prev) => prev.filter((item) => item.id !== id));
+    showToast(`ลบข้อมูลโครงการ ${target?.branch_name || id} ออกจากระบบเรียบร้อยแล้ว`, 'info');
+  };
+
   // Count pending items for badge
   const pendingCount = evaluations.filter((item) => item.approval_status === 'PENDING_APPROVAL').length;
 
@@ -355,6 +362,9 @@ export default function App() {
               <DashboardView
                 evaluations={evaluations}
                 settings={settings}
+                currentRole={currentRole}
+                onDeleteEvaluation={handleDeleteEvaluation}
+                activeId={targetEvalId}
                 onNavigateUpload={() => setCurrentTab('upload')}
               />
             )}
@@ -375,6 +385,7 @@ export default function App() {
                 settings={settings}
                 onApprove={handleApprove}
                 onReject={handleReject}
+                onDeleteEvaluation={handleDeleteEvaluation}
                 onViewInDashboard={(id) => {
                   setTargetEvalId(id);
                   setCurrentTab('dashboard');

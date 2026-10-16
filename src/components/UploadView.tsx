@@ -28,6 +28,7 @@ import {
   Info,
   Send,
   Calendar,
+  Clock,
 } from 'lucide-react';
 
 interface UploadViewProps {
@@ -120,6 +121,93 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submitSuccessMsg, setSubmitSuccessMsg] = useState('');
+
+  // Helper to sync updated dates to draft evaluation result if already evaluated
+  const syncDatesToEvaluationResult = (newUploadDate: string, newDeliveryDate: string) => {
+    if (!evaluationResult || isSubmitted) return;
+    const u = new Date(newUploadDate);
+    const d = new Date(newDeliveryDate);
+    const rem = Math.ceil((d.getTime() - u.getTime()) / (24 * 60 * 60 * 1000));
+    const el = Math.max(0, totalDays - rem);
+    const wk = Math.min(totalWeeks, Math.max(0, Math.round(el / 7)));
+    const basePlan = baselinePlanTable[wk] !== undefined ? baselinePlanTable[wk] : Math.round((wk / 10) * 100);
+    const diff = parseFloat((evaluationResult.calculated_actual_progress - basePlan).toFixed(1));
+    let flag: 'EXCELLENT' | 'ON_TRACK' | 'WARNING' | 'CRITICAL' = 'ON_TRACK';
+    if (diff >= 5) flag = 'EXCELLENT';
+    else if (diff >= -5) flag = 'ON_TRACK';
+    else if (diff >= -15) flag = 'WARNING';
+    else flag = 'CRITICAL';
+
+    setEvaluationResult((prev) =>
+      prev
+        ? {
+            ...prev,
+            evaluated_date: newUploadDate,
+            delivery_date: newDeliveryDate,
+            current_week_index: wk,
+            baseline_plan_progress: basePlan,
+            variance_diff: diff,
+            status_flag: flag,
+          }
+        : null
+    );
+  };
+
+  const handleUploadDateChange = (newDate: string) => {
+    setUploadDate(newDate);
+    syncDatesToEvaluationResult(newDate, deliveryDate);
+  };
+
+  const handleDeliveryDateChange = (newDate: string) => {
+    setDeliveryDate(newDate);
+    syncDatesToEvaluationResult(uploadDate, newDate);
+  };
+
+  // Quick Preset Date Helpers (User Request 2: เลือกวันที่อัปโหลด และ วันที่ส่งมอบ ได้เอง)
+  const setUploadToday = () => {
+    const today = new Date().toISOString().split('T')[0];
+    handleUploadDateChange(today);
+  };
+
+  const setUploadYesterday = () => {
+    const y = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    handleUploadDateChange(y);
+  };
+
+  const setUploadMinus7Days = () => {
+    const d = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    handleUploadDateChange(d);
+  };
+
+  const setDeliveryPlus10Weeks = () => {
+    const u = new Date(uploadDate);
+    const d = new Date(u.getTime() + 70 * 24 * 60 * 60 * 1000);
+    if (!isNaN(d.getTime())) {
+      handleDeliveryDateChange(d.toISOString().split('T')[0]);
+    }
+  };
+
+  const setDeliveryPlus30Days = () => {
+    const u = new Date(uploadDate);
+    const d = new Date(u.getTime() + 30 * 24 * 60 * 60 * 1000);
+    if (!isNaN(d.getTime())) {
+      handleDeliveryDateChange(d.toISOString().split('T')[0]);
+    }
+  };
+
+  const setDeliveryPlus60Days = () => {
+    const u = new Date(uploadDate);
+    const d = new Date(u.getTime() + 60 * 24 * 60 * 60 * 1000);
+    if (!isNaN(d.getTime())) {
+      handleDeliveryDateChange(d.toISOString().split('T')[0]);
+    }
+  };
+
+  const setDeliveryEndOfMonth = () => {
+    const u = new Date(uploadDate);
+    const end = new Date(u.getFullYear(), u.getMonth() + 2, 0);
+    handleDeliveryDateChange(end.toISOString().split('T')[0]);
+  };
 
   // Handle single photo upload with automated client-side downscaling and compression
   const handlePhotoUpload = async (key: keyof PhotoData, file: File) => {
@@ -502,13 +590,162 @@ export const UploadView: React.FC<UploadViewProps> = ({
         </div>
       </div>
 
-      {/* 2.2 PROJECT METADATA FORM (1.5 - 1.10) */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
-        <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-          <span>📋</span> 2.2 ข้อมูลกำกับโครงการ (Project Metadata 1.5 - 1.10)
-        </h3>
+      {/* 2.2 PROJECT METADATA & CUSTOM DATE SELECTION (1.5 - 1.10) */}
+      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <span>📋</span>
+            <span>2.2 ข้อมูลกำกับโครงการและเลือกวันที่ (Project Metadata 1.5 - 1.10)</span>
+          </h3>
+          <span className="text-xs text-cyan-300 bg-cyan-950/70 border border-cyan-800/80 px-2.5 py-0.5 rounded-full font-medium">
+            ✨ สามารถเลือกวันที่อัปโหลด และ วันที่ส่งมอบงาน ได้เองอย่างอิสระ
+          </span>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+        {/* PROMINENT DEDICATED DATE PICKER CARD (Requirement 2: สามารถเลือก วันที่อัปโหลด และ วันที่ส่งมอบงาน ได้เอง) */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-cyan-950/30 via-slate-950 to-slate-950 border-2 border-cyan-500/40 shadow-xl space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-cyan-300">
+              <Calendar className="w-4 h-4 text-cyan-400" />
+              <span>กำหนดวันที่ประเมิน (Upload Date) & วันที่ส่งมอบงาน (Delivery Date):</span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              ระบบจะคำนวณสัปดาห์ (Week 0-10) และเป้าหมายสะสมตาม S-Curve อัตโนมัติทันที
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* 1.6 วันที่อัปโหลดข้อมูล */}
+            <div className="bg-slate-900/90 p-4 rounded-xl border border-cyan-800/60 space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span className="p-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                    <Calendar className="w-3.5 h-3.5" />
+                  </span>
+                  <span>1.6 วันที่อัปโหลดข้อมูล (Upload Date)</span>
+                  <span className="text-rose-400">*</span>
+                </label>
+                <span className="text-[10px] text-cyan-400 font-mono">วันที่ถ่าย/ส่งตรวจภาพ</span>
+              </div>
+
+              <input
+                type="date"
+                value={uploadDate}
+                onChange={(e) => handleUploadDateChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border-2 border-cyan-600/60 hover:border-cyan-400 focus:border-cyan-400 text-white font-mono text-sm shadow-inner focus:outline-none transition-colors cursor-pointer"
+              />
+
+              {/* Quick Preset Buttons for Upload Date */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[10px] text-slate-400">เลือกด่วน:</span>
+                <button
+                  type="button"
+                  onClick={setUploadToday}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-900 hover:text-cyan-200 border border-slate-700 text-slate-200 transition-colors font-medium"
+                >
+                  📅 วันนี้
+                </button>
+                <button
+                  type="button"
+                  onClick={setUploadYesterday}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-900 hover:text-cyan-200 border border-slate-700 text-slate-200 transition-colors"
+                >
+                  เมื่อวาน
+                </button>
+                <button
+                  type="button"
+                  onClick={setUploadMinus7Days}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-cyan-900 hover:text-cyan-200 border border-slate-700 text-slate-200 transition-colors"
+                >
+                  ย้อนหลัง 7 วัน
+                </button>
+              </div>
+            </div>
+
+            {/* 1.7 วันที่ส่งมอบงาน */}
+            <div className="bg-slate-900/90 p-4 rounded-xl border border-emerald-800/60 space-y-2.5 shadow-md">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span className="p-1 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+                    <Clock className="w-3.5 h-3.5" />
+                  </span>
+                  <span>1.7 วันที่ส่งมอบงาน (Delivery Date)</span>
+                  <span className="text-rose-400">*</span>
+                </label>
+                <span className="text-[10px] text-emerald-400 font-mono">วันกำหนดเสร็จสิ้นสัญญา</span>
+              </div>
+
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={(e) => handleDeliveryDateChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border-2 border-emerald-600/60 hover:border-emerald-400 focus:border-emerald-400 text-white font-mono text-sm shadow-inner focus:outline-none transition-colors cursor-pointer"
+              />
+
+              {/* Quick Preset Buttons for Delivery Date */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[10px] text-slate-400">เลือกด่วน:</span>
+                <button
+                  type="button"
+                  onClick={setDeliveryPlus10Weeks}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 transition-colors font-medium"
+                >
+                  🎯 มาตรฐาน 10 สัปดาห์ (+70 วัน)
+                </button>
+                <button
+                  type="button"
+                  onClick={setDeliveryPlus30Days}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-colors"
+                >
+                  +30 วัน
+                </button>
+                <button
+                  type="button"
+                  onClick={setDeliveryPlus60Days}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-colors"
+                >
+                  +60 วัน
+                </button>
+                <button
+                  type="button"
+                  onClick={setDeliveryEndOfMonth}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-colors"
+                >
+                  สิ้นเดือนถัดไป
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic Real-time Calculations Based on Chosen Dates */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-[11px] pt-1">
+            <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[10px]">สัปดาห์ประเมินปัจจุบัน:</span>
+              <strong className="text-cyan-300 text-sm font-mono">Week {calculatedCurrentWeek}</strong>
+              <span className="text-slate-500 text-[10px] block">จากระยะเวลามาตรฐาน 10 สัปดาห์</span>
+            </div>
+            <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[10px]">เป้าหมายแผนงานสะสม (S-Curve):</span>
+              <strong className="text-emerald-400 text-sm font-mono">{autoBaselinePlanProgress}%</strong>
+              <span className="text-slate-500 text-[10px] block">คำนวณตามสูตร Week {calculatedCurrentWeek}</span>
+            </div>
+            <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[10px]">วันเริ่มงานคำนวณ (Week 0):</span>
+              <strong className="text-slate-200 text-sm font-mono">{startDateFormatted || '-'}</strong>
+              <span className="text-slate-500 text-[10px] block">ย้อนหลังจากวันส่งมอบ 70 วัน</span>
+            </div>
+            <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800">
+              <span className="text-slate-400 block text-[10px]">ระยะเวลาคงเหลือส่งมอบ:</span>
+              <strong className={`text-sm font-mono ${daysRemaining > 0 ? 'text-amber-300' : 'text-rose-400'}`}>
+                {daysRemaining > 0 ? `${daysRemaining} วัน` : 'ครบกำหนดแล้ว'}
+              </strong>
+              <span className="text-slate-500 text-[10px] block">นับจากวันอัปโหลดถึงวันส่งมอบ</span>
+            </div>
+          </div>
+        </div>
+
+        {/* OTHER PROJECT METADATA FIELDS (1.5, 1.8, 1.9, 1.10) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           {/* 1.5 ชื่อสาขา */}
           <div>
             <label className="block text-slate-300 font-medium mb-1">
@@ -523,36 +760,10 @@ export const UploadView: React.FC<UploadViewProps> = ({
             />
           </div>
 
-          {/* 1.6 วันที่อัปโหลดข้อมูล (Requirement 2.2) */}
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">
-              1.6 วันที่อัปโหลดข้อมูล (Upload Date) <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="date"
-              value={uploadDate}
-              onChange={(e) => setUploadDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
-          {/* 1.7 วันที่ส่งมอบงาน (Requirement 2.2) */}
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">
-              1.7 วันที่ส่งมอบงาน (Delivery Date) <span className="text-rose-400">*</span>
-            </label>
-            <input
-              type="date"
-              value={deliveryDate}
-              onChange={(e) => setDeliveryDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-500"
-            />
-          </div>
-
           {/* 1.8 พิกัดตำแหน่ง */}
           <div>
             <label className="block text-slate-300 font-medium mb-1">
-              1.8 พิกัดตำแหน่ง (ชื่อจังหวัดในไทย) <span className="text-rose-400">*</span>
+              1.8 พิกัดตำแหน่ง (จังหวัด) <span className="text-rose-400">*</span>
             </label>
             <select
               value={province}
@@ -593,43 +804,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
               placeholder="ชื่อวิศวกรหรือผู้คุมงาน"
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-500"
             />
-          </div>
-
-          {/* Dynamic Standard 10-Week Timeline Banner (Requirement 2.3 & 2.4 & 3) */}
-          <div className="sm:col-span-2 lg:col-span-3 p-4 rounded-xl bg-cyan-950/40 border border-cyan-800/80 space-y-2.5">
-            <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-cyan-300 gap-2">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-cyan-400" />
-                <span>แผนงานมาตรฐานโครงการ 10 สัปดาห์ และเป้าสะสมอัตโนมัติ (Standard 10-Week S-Curve):</span>
-              </span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] bg-cyan-900/80 border border-cyan-700 px-2.5 py-0.5 rounded-full text-cyan-200">
-                  สัปดาห์ประเมิน: Week {calculatedCurrentWeek} / 10
-                </span>
-                <span className="font-mono text-[11px] bg-emerald-950 border border-emerald-800 px-2.5 py-0.5 rounded-full text-emerald-300 font-bold">
-                  เป้าหมายแผนงานสะสม: {autoBaselinePlanProgress}%
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 pt-1">
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">ระยะเวลามาตรฐาน:</span>
-                <strong className="text-cyan-300 font-mono">10 สัปดาห์ (70 วัน)</strong>
-              </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">วันเริ่มงาน (Week 0):</span>
-                <strong className="text-slate-200 font-mono">{startDateFormatted || 'คำนวณอัตโนมัติ'}</strong>
-              </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">วันที่อัปโหลดข้อมูลประเมิน:</span>
-                <strong className="text-cyan-300 font-mono">{uploadDate} (Week {calculatedCurrentWeek})</strong>
-              </div>
-              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">วันส่งมอบงาน (Week 10 ขวาสุด):</span>
-                <strong className="text-emerald-300 font-mono">{deliveryDate} (เหลือ {daysRemaining} วัน)</strong>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -739,6 +913,19 @@ export const UploadView: React.FC<UploadViewProps> = ({
               <h3 className="text-xl font-bold text-white mt-1">
                 ผลการประเมิน: {evaluationResult.branch_name}
               </h3>
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                <span className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>วันที่อัปโหลด: <strong className="text-cyan-300 font-mono">{evaluationResult.evaluated_date}</strong></span>
+                </span>
+                <span className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-slate-300">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>วันที่ส่งมอบ: <strong className="text-emerald-300 font-mono">{evaluationResult.delivery_date}</strong></span>
+                </span>
+                <span className="bg-cyan-950/60 border border-cyan-800/60 px-2.5 py-1 rounded-lg text-cyan-300 text-[11px] font-mono">
+                  สัปดาห์ที่ {evaluationResult.current_week_index} / 10 (เป้าหมาย S-Curve: {evaluationResult.baseline_plan_progress}%)
+                </span>
+              </div>
             </div>
 
             {/* BUTTON 2: SUBMIT TO SYSTEM (Requirement 2.1) */}

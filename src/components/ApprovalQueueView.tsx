@@ -14,6 +14,8 @@ import {
   User,
   Calendar,
   Layers,
+  Trash2,
+  X,
 } from 'lucide-react';
 
 interface ApprovalQueueViewProps {
@@ -23,6 +25,7 @@ interface ApprovalQueueViewProps {
   onApprove: (id: string, updatedRecord?: Partial<EvaluationRecord>) => void;
   onReject: (id: string, reason: string) => void;
   onViewInDashboard: (id: string) => void;
+  onDeleteEvaluation?: (id: string) => void;
 }
 
 export const ApprovalQueueView: React.FC<ApprovalQueueViewProps> = ({
@@ -32,9 +35,11 @@ export const ApprovalQueueView: React.FC<ApprovalQueueViewProps> = ({
   onApprove,
   onReject,
   onViewInDashboard,
+  onDeleteEvaluation,
 }) => {
   const [filterTab, setFilterTab] = useState<'PENDING' | 'ALL' | 'APPROVED' | 'REJECTED'>('PENDING');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState<EvaluationRecord | null>(null);
   const [editScores, setEditScores] = useState<{
     front_facade: number;
     interior: number;
@@ -433,6 +438,18 @@ export const ApprovalQueueView: React.FC<ApprovalQueueViewProps> = ({
                       </>
                     )}
 
+                    {/* Admin Delete Approved Record (Requirement 1: Admin สามารถลบข้อมูลที่ได้รับอนุมัติแล้วได้ ถ้าพิจารณาว่าไม่เหมาะสม) */}
+                    {canApprove && currentRole === 'ADMIN' && onDeleteEvaluation && item.approval_status === 'APPROVED' && (
+                      <button
+                        onClick={() => setDeleteConfirmItem(item)}
+                        className="px-3 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 text-xs font-semibold transition-colors flex items-center gap-1.5 active:scale-95"
+                        title="ลบข้อมูลที่ได้รับการอนุมัติแล้ว (หากพิจารณาว่าไม่เหมาะสม)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>ลบข้อมูลที่อนุมัติแล้ว</span>
+                      </button>
+                    )}
+
                     {!canApprove && isPending && (
                       <span className="text-[11px] text-slate-500 italic">
                         * รอผู้ควบคุมงาน (Supervisor) หรือ Admin ดำเนินการอนุมัติ
@@ -451,6 +468,86 @@ export const ApprovalQueueView: React.FC<ApprovalQueueViewProps> = ({
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             ผลการประเมินทั้งหมดได้รับการอนุมัติเรียบร้อย หรือยังไม่มีรายการที่ AI มีค่าความมั่นใจต่ำกว่า {settings.confidenceThreshold}%
           </p>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal for ApprovalQueueView */}
+      {deleteConfirmItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-800/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 text-left">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-400 font-bold text-base">
+                <span className="p-2 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300">
+                  <ShieldAlert className="w-5 h-5" />
+                </span>
+                <span>ยืนยันการลบข้อมูลที่อนุมัติแล้ว (Admin Only)</span>
+              </div>
+              <button
+                onClick={() => setDeleteConfirmItem(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-900/80 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-rose-300">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>คำเตือน: คุณกำลังจะลบข้อมูลโครงการที่ได้รับการอนุมัติแล้ว</span>
+              </div>
+              <p className="text-rose-200/80 leading-relaxed">
+                หากพิจารณาแล้วว่าข้อมูลนี้ไม่ถูกต้อง หรือไม่เหมาะสม การลบจะนำผลประเมินของ <strong>{deleteConfirmItem.branch_name}</strong> ออกจากระบบแดชบอร์ดและคิวอนุมัติทันที
+              </p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">ชื่อโครงการ:</span>
+                <strong className="text-white text-sm">{deleteConfirmItem.branch_name}</strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">รหัสอ้างอิง:</span>
+                <span className="font-mono text-cyan-300">{deleteConfirmItem.id}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">วันที่ประเมิน:</span>
+                <span className="text-slate-200">{deleteConfirmItem.evaluated_date}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">ความคืบหน้าจริง:</span>
+                <span className="font-bold text-emerald-400">{deleteConfirmItem.calculated_actual_progress}%</span>
+              </div>
+              {deleteConfirmItem.approved_by && (
+                <div className="flex justify-between items-center text-slate-300">
+                  <span className="text-slate-500 font-medium">อนุมัติโดยเดิม:</span>
+                  <span className="text-emerald-300 text-[11px]">{deleteConfirmItem.approved_by}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmItem(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteEvaluation && deleteConfirmItem) {
+                    onDeleteEvaluation(deleteConfirmItem.id);
+                    setDeleteConfirmItem(null);
+                  }
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 flex items-center gap-1.5 active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ยืนยันการลบ</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

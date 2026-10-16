@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { EvaluationRecord, AppSettings } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import { EvaluationRecord, AppSettings, UserRole } from '../types';
 import { AIMascot } from './AIMascot';
 import { SCurveChart } from './SCurveChart';
 import { PhotoGallery } from './PhotoGallery';
@@ -17,18 +17,28 @@ import {
   Clock,
   ChevronRight,
   ExternalLink,
+  Trash2,
+  AlertTriangle,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface DashboardViewProps {
   evaluations: EvaluationRecord[];
   settings: AppSettings;
   onNavigateUpload: () => void;
+  currentRole?: UserRole;
+  onDeleteEvaluation?: (id: string) => void;
+  activeId?: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   evaluations,
   settings,
   onNavigateUpload,
+  currentRole,
+  onDeleteEvaluation,
+  activeId,
 }) => {
   // Filter States
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
@@ -37,7 +47,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedUploadDate, setSelectedUploadDate] = useState<string>('ALL');
 
   // Selected Active Evaluation for Deep Inspection
-  const [activeEvalId, setActiveEvalId] = useState<string>(evaluations[0]?.id || '');
+  const [activeEvalId, setActiveEvalId] = useState<string>(activeId || evaluations[0]?.id || '');
+
+  // Delete confirmation modal state (Admin feature for Requirement 1)
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<EvaluationRecord | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>('');
+
+  // Sync activeId if parent passes a new target ID
+  useEffect(() => {
+    if (activeId) {
+      setActiveEvalId(activeId);
+    }
+  }, [activeId]);
 
   // Extract unique branches, provinces, contractors, and upload dates from current evaluations
   const branchOptions = useMemo(() => {
@@ -269,9 +290,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
                 </div>
 
-                <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                  {currentRecord.branch_name}
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+                    {currentRecord.branch_name}
+                  </h2>
+                  {currentRole === 'ADMIN' && onDeleteEvaluation && (
+                    <button
+                      onClick={() => {
+                        setConfirmDeleteRecord(currentRecord);
+                        setDeleteReason('');
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-200 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-lg shadow-rose-950/40 active:scale-95 group"
+                      title="ลบข้อมูลโครงการที่ได้รับการอนุมัตินี้ (เฉพาะ Admin หากพิจารณาว่าไม่เหมาะสม)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                      <span>ลบข้อมูลโครงการนี้ (Admin Only)</span>
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 mt-2">
                   <div className="flex items-center gap-1">
                     <Building className="w-3.5 h-3.5 text-amber-400" />
@@ -429,6 +465,99 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             ไปที่หน้าอัปโหลดรูปภาพ (AI Upload)
           </button>
+        </div>
+      )}
+
+      {/* Admin Delete Confirmation Modal (Requirement 1: อนุญาตให้ Admin ลบข้อมูลที่ได้รับอนุมัติแล้วได้ ถ้าพิจารณาว่าไม่เหมาะสม) */}
+      {confirmDeleteRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-800/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 text-left">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-rose-400 font-bold text-base">
+                <span className="p-2 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300">
+                  <ShieldAlert className="w-5 h-5" />
+                </span>
+                <span>ยืนยันการลบข้อมูลโครงการ (เฉพาะ Admin)</span>
+              </div>
+              <button
+                onClick={() => setConfirmDeleteRecord(null)}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-900/80 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-semibold text-rose-300">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>คำเตือน: คุณกำลังจะลบข้อมูลโครงการที่ได้รับการอนุมัติแล้ว</span>
+              </div>
+              <p className="text-rose-200/80 leading-relaxed">
+                การลบข้อมูลนี้จะนำผลการประเมินออกจากระบบ Dashboard ทันที เหมาะสำหรับกรณีที่ตรวจสอบพบว่าข้อมูลไม่ถูกต้อง ส่งซ้ำ หรือพิจารณาแล้วว่าไม่เหมาะสมตามดุลยพินิจของ Admin
+              </p>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">ชื่อสาขาโครงการ:</span>
+                <strong className="text-white text-sm">{confirmDeleteRecord.branch_name}</strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">รหัสอ้างอิง:</span>
+                <span className="font-mono text-cyan-300">{confirmDeleteRecord.id}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">วันที่อัปโหลด:</span>
+                <span className="text-slate-200">{confirmDeleteRecord.evaluated_date}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">ความคืบหน้าจริง (Actual):</span>
+                <span className="font-bold text-emerald-400">{confirmDeleteRecord.calculated_actual_progress}%</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-300">
+                <span className="text-slate-500 font-medium">สถานะปัจจุบัน:</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                  {confirmDeleteRecord.approval_status === 'APPROVED' ? 'อนุมัติเรียบร้อยแล้ว' : confirmDeleteRecord.approval_status}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                ระบุเหตุผลในการลบ (ถ้ามี):
+              </label>
+              <input
+                type="text"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="เช่น ข้อมูลไม่ถูกต้องตามมาตรฐาน, รูปภาพผิดหมวด, ไม่เหมาะสม"
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteRecord(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteEvaluation && confirmDeleteRecord) {
+                    onDeleteEvaluation(confirmDeleteRecord.id);
+                    setConfirmDeleteRecord(null);
+                  }
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all shadow-lg shadow-rose-600/30 flex items-center gap-1.5 active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ยืนยันการลบข้อมูลโครงการ</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
