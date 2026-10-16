@@ -52,40 +52,61 @@ export function generateSampleConstructionImage(type: 'facade' | 'interior' | 'r
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+// Standard 10-week cumulative baseline plan for Shop TFM projects
+// Week 0 (0%) -> Week 10 (100%)
+export const DEFAULT_SCURVE_10_WEEKS: number[] = [0, 5, 12, 22, 35, 50, 65, 78, 88, 95, 100];
+
+// Stage descriptions for each of the 10 weeks
+export const SCURVE_WEEK_DESCRIPTIONS: { week: number; title: string; desc: string }[] = [
+  { week: 0, title: 'เริ่มโครงการ (Kick-off)', desc: 'ส่งมอบพื้นที่, วางผังเสาเข็มและจัดตั้งแคมป์คนงาน' },
+  { week: 1, title: 'งานฐานรากและโครงสร้างใต้ดิน', desc: 'ขุดดิน, เทลีน, หล่อตอม่อและคานคอดิน' },
+  { week: 2, title: 'โครงสร้างหลักเสาและคาน', desc: 'ตั้งตุ๊กตา, เทคอนกรีตเสา, คาน และพื้นชั้นล่าง' },
+  { week: 3, title: 'โครงสร้างหลังคาและมุงหลังคา', desc: 'ติดตั้งโครงถักเหล็กกัลวาไนซ์, มุงเมทัลชีท, รางน้ำฝน' },
+  { week: 4, title: 'งานก่อผนังและเดินท่อระบบ', desc: 'ก่ออิฐมวลเบา, ร้อยท่อสายไฟ EMT, ท่อน้ำดีและสุขาภิบาล' },
+  { week: 5, title: 'งานฉาบปูนและติดตั้งแอร์', desc: 'ฉาบผิวเรียบผนัง, แขวนยูนิตแฟนคอยล์แอร์, กรอบกระจก' },
+  { week: 6, title: 'งานฝ้าเพดานและเทลานจอดรถ', desc: 'โครงฝ้าฉาบเรียบ/ทีบาร์, บดอัดหินคลุกและเทคอนกรีตลานจอด' },
+  { week: 7, title: 'งานปูพื้นกระเบื้องและป้ายร้าน', desc: 'ปูแกรนิตโต้ 60x60, ติดตั้งบานกระจกนิรภัย Facade และป้าย TFM' },
+  { week: 8, title: 'งาน Built-in ตกแต่งและตีเส้นลานจอด', desc: 'ติดตั้งเคาน์เตอร์, ชั้นวางสินค้า, ระบบไฟ LED, ตีเส้นจราจร' },
+  { week: 9, title: 'ทดสอบระบบไฟฟ้า/ประปาและติดตั้งตู้เย็น', desc: 'Commissioning ระบบไฟฉุกเฉิน, ระบบ POS, ทดสอบแอร์ 24 ชม.' },
+  { week: 10, title: 'ส่งมอบงานและตรวจรับ Defect Checklist', desc: 'ทำความสะอาด Big Cleaning, Final Inspection, ส่งมอบกุญแจ' },
+];
+
 // Generate realistic S-Curve points from Week 0 (left) to Week N (right, matching Delivery Date)
 export function generateSCurveData(
-  totalWeeks: number = 12,
+  totalWeeks: number = 10,
   currentActual: number = 78,
-  currentPlan: number = 75,
+  currentPlan?: number,
   evaluatedDate: string = '2026-10-02',
-  deliveryDate: string = '2026-11-15'
+  deliveryDate: string = '2026-11-15',
+  customBaselinePlan?: number[]
 ): SCurveWeekPoint[] {
   const points: SCurveWeekPoint[] = [];
 
   const delivery = new Date(deliveryDate);
   const evalDate = new Date(evaluatedDate);
 
-  // Start date calculated backward from delivery date: delivery - (totalWeeks * 7 days)
-  const totalDays = totalWeeks * 7;
+  // Standard duration: default 10 weeks
+  const effectiveWeeks = totalWeeks > 0 ? totalWeeks : 10;
+  const totalDays = effectiveWeeks * 7;
   const startDate = new Date(delivery.getTime() - totalDays * 24 * 60 * 60 * 1000);
 
   // Calculate current week index based on evaluatedDate relative to startDate & deliveryDate
   const daysFromStart = Math.max(0, (evalDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
-  const currentWeekIndex = Math.min(totalWeeks, Math.max(0, Math.round(daysFromStart / 7)));
+  const currentWeekIndex = Math.min(effectiveWeeks, Math.max(0, Math.round(daysFromStart / 7)));
 
-  for (let w = 0; w <= totalWeeks; w++) {
+  for (let w = 0; w <= effectiveWeeks; w++) {
     const pointDate = new Date(startDate.getTime() + w * 7 * 24 * 60 * 60 * 1000);
     const dateLabel = `${pointDate.getDate()}/${pointDate.getMonth() + 1}`;
 
-    // Standard Sigmoid S-Curve from 0% at Week 0 to 100% at Week N (Delivery Date)
-    // S(t) = 1 / (1 + e^(-k*(t - 0.5)))
     let baselinePlan = 0;
     if (w === 0) {
       baselinePlan = 0;
-    } else if (w === totalWeeks) {
+    } else if (customBaselinePlan && customBaselinePlan[w] !== undefined) {
+      baselinePlan = customBaselinePlan[w];
+    } else if (w === effectiveWeeks) {
       baselinePlan = 100;
     } else {
-      const t = w / totalWeeks;
+      const t = w / effectiveWeeks;
       const rawSigmoid = 1 / (1 + Math.exp(-6 * (t - 0.5)));
       const s0 = 1 / (1 + Math.exp(-6 * (0 - 0.5)));
       const s1 = 1 / (1 + Math.exp(-6 * (1 - 0.5)));
@@ -95,7 +116,7 @@ export function generateSCurveData(
 
     let actualProgress: number | null = null;
     const isCurrentWeek = w === currentWeekIndex;
-    const isDeliveryWeek = w === totalWeeks;
+    const isDeliveryWeek = w === effectiveWeeks;
 
     if (w === 0) {
       actualProgress = 0;

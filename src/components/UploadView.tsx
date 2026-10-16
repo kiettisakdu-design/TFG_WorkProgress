@@ -11,6 +11,7 @@ import {
   generateSampleConstructionImage,
   PROVINCES_LIST,
   CONTRACTORS_LIST,
+  DEFAULT_SCURVE_10_WEEKS,
 } from '../utils/sampleData';
 import { compressImageFile } from '../utils/imageCompressor';
 import {
@@ -25,6 +26,8 @@ import {
   Layers,
   ArrowRight,
   Info,
+  Send,
+  Calendar,
 } from 'lucide-react';
 
 interface UploadViewProps {
@@ -79,17 +82,18 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const [photos, setPhotos] = useState<PhotoData>({});
 
   // Metadata state (1.5 - 1.10)
+  // Requirement 2.2: User can select Upload Date and Delivery Date
+  // Requirement 2.3: Total Weeks input removed, standardized to 10 weeks
+  // Requirement 2.4: Baseline plan % manual selection removed, automatically derived from 10-week S-curve
   const [branchName, setBranchName] = useState('สาขา พัทยา บีช');
   const [uploadDate, setUploadDate] = useState(new Date().toISOString().split('T')[0]);
   const [deliveryDate, setDeliveryDate] = useState('2026-12-15');
-  const [totalWeeks, setTotalWeeks] = useState(settings.sCurveWeeks || 12);
+  const totalWeeks = 10; // Standard 10 weeks for all projects as per Requirement 3
   const [province, setProvince] = useState('ชลบุรี');
   const [contractor, setContractor] = useState('บจก. สยาม คอนสตรัคชั่น บิลเดอร์');
   const [supervisor, setSupervisor] = useState('วิศวกร ภานุวัฒน์ สินธุเดชา (วศ.บ. โยธา)');
-  const [baselinePlanProgress, setBaselinePlanProgress] = useState(70);
 
-  // Automatic Timeline Calculation (Requirement 5):
-  // Calculate Start Date backward from Delivery Date by TotalWeeks
+  // Automatic Timeline & Week Calculation (Standard 10 Weeks = 70 Days):
   const totalDays = totalWeeks * 7;
   const delivery = new Date(deliveryDate);
   const startDate = new Date(delivery.getTime() - totalDays * 24 * 60 * 60 * 1000);
@@ -99,12 +103,23 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const calculatedCurrentWeek = Math.min(totalWeeks, Math.max(0, Math.round(daysElapsed / 7)));
   const startDateFormatted = !isNaN(startDate.getTime()) ? startDate.toISOString().split('T')[0] : '';
 
+  // Automatic S-Curve Baseline Plan % looked up from Admin settings (or standard default)
+  const baselinePlanTable = settings.sCurveBaselinePlan || DEFAULT_SCURVE_10_WEEKS;
+  const autoBaselinePlanProgress = baselinePlanTable[calculatedCurrentWeek] !== undefined
+    ? baselinePlanTable[calculatedCurrentWeek]
+    : Math.round((calculatedCurrentWeek / 10) * 100);
+
   // Analysis State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState('');
   const [evaluationResult, setEvaluationResult] = useState<EvaluationRecord | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [compressingKey, setCompressingKey] = useState<keyof PhotoData | null>(null);
+
+  // Submission State (Requirement 2.1: Separate AI Evaluation button from Submit button)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitSuccessMsg, setSubmitSuccessMsg] = useState('');
 
   // Handle single photo upload with automated client-side downscaling and compression
   const handlePhotoUpload = async (key: keyof PhotoData, file: File) => {
@@ -135,11 +150,12 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const loadPreset = (presetType: 'EXCELLENT' | 'ON_TRACK' | 'WARNING' | 'CRITICAL') => {
     setErrorMsg('');
     setEvaluationResult(null);
+    setIsSubmitted(false);
+    setSubmitSuccessMsg('');
 
     if (presetType === 'EXCELLENT') {
       setBranchName('สาขา สยามสแควร์ (อัปเดตใหม่)');
       setProvince('กรุงเทพฯ');
-      setBaselinePlanProgress(75);
       setPhotos({
         facade: generateSampleConstructionImage('facade', 'หน้าร้านสยามสแควร์ ป้ายไฟและกระจกพร้อม', 92),
         interior: generateSampleConstructionImage('interior', 'ห้องโถงหลัก ปูพื้นแกรนิตโต้และแอร์ทำงานได้', 90),
@@ -149,7 +165,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
     } else if (presetType === 'ON_TRACK') {
       setBranchName('สาขา หาดใหญ่ เซ็นทรัล');
       setProvince('สงขลา');
-      setBaselinePlanProgress(60);
       setPhotos({
         facade: generateSampleConstructionImage('facade', 'ด้านหน้าอาคารสาขาหาดใหญ่ ติดตั้งกรอบกระจก', 62),
         interior: generateSampleConstructionImage('interior', 'งานเดินท่อร้อยสายไฟและติดตั้งฝ้าฉาบเรียบ', 60),
@@ -159,7 +174,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
     } else if (presetType === 'WARNING') {
       setBranchName('สาขา หัวหิน มาร์เก็ต');
       setProvince('ประจวบคีรีขันธ์');
-      setBaselinePlanProgress(70);
       setPhotos({
         facade: generateSampleConstructionImage('facade', 'หน้าร้านหัวหิน ติดตั้งโครงเหล็กค้างอยู่', 60),
         interior: generateSampleConstructionImage('interior', 'งานฝ้าภายในรอยิปซั่มบอร์ดและช่างแอร์', 55),
@@ -169,7 +183,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
     } else {
       setBranchName('สาขา เชียงราย เมืองใหม่');
       setProvince('เชียงราย');
-      setBaselinePlanProgress(65);
       setPhotos({
         facade: generateSampleConstructionImage('facade', 'หน้าร้านโครงสร้างคานเปล่า ยังไม่ได้มุงหลังคา', 35),
         interior: generateSampleConstructionImage('interior', 'ภายในไม่มีการเดินสายไฟ กองอิฐกระจัดกระจาย', 30),
@@ -179,7 +192,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
     }
   };
 
-  // Run AI Vision Evaluation
+  // 1. Run AI Vision Evaluation (Button 1: ประเมินความคืบหน้าด้วย AI Vision เพื่อตรวจสอบผลก่อน)
   const handleRunEvaluation = async () => {
     // Check if at least 1 photo is attached
     const photoCount = Object.values(photos).filter(Boolean).length;
@@ -191,6 +204,8 @@ export const UploadView: React.FC<UploadViewProps> = ({
     setIsAnalyzing(true);
     setErrorMsg('');
     setEvaluationResult(null);
+    setIsSubmitted(false);
+    setSubmitSuccessMsg('');
 
     try {
       setAnalysisStep('1/4 กำลังตรวจสอบภาพถ่ายทั้ง 4 หมวดตามจุดตรวจมาตรฐาน Shop TFM...');
@@ -208,17 +223,17 @@ export const UploadView: React.FC<UploadViewProps> = ({
           province,
           contractor,
           supervisor,
-          baseline_plan_progress: baselinePlanProgress,
+          baseline_plan_progress: autoBaselinePlanProgress,
           weights: settings.weights,
           confidence_threshold: settings.confidenceThreshold,
           photos,
         }),
       });
 
-      setAnalysisStep('3/4 คำนวณความคืบหน้ารวมแบบถ่วงน้ำหนัก และเปรียบเทียบกับ Baseline Plan...');
+      setAnalysisStep('3/4 คำนวณความคืบหน้ารวมแบบถ่วงน้ำหนัก และเปรียบเทียบกับ Baseline Plan S-Curve...');
       await new Promise((r) => setTimeout(r, 400));
 
-      // Safe HTTP response parsing to prevent "Unexpected token 'T', 'The page c...' is not valid JSON"
+      // Safe HTTP response parsing
       const contentType = response.headers.get('content-type') || '';
       let result: any = null;
 
@@ -256,7 +271,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
         throw new Error(result.error || 'Evaluation returned unsuccessful response');
       }
 
-      setAnalysisStep('4/4 ประเมินเกณฑ์ความมั่นใจ AI และบันทึกผลเข้าระบบ...');
+      setAnalysisStep('4/4 ประเมินเกณฑ์ความมั่นใจ AI และพร้อมตรวจสอบรายงานผล...');
       await new Promise((r) => setTimeout(r, 400));
 
       const evalData = result.data;
@@ -275,7 +290,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
         confidence_score: evalData.confidence_score,
         category_scores: evalData.category_scores,
         calculated_actual_progress: evalData.calculated_actual_progress,
-        baseline_plan_progress: evalData.baseline_plan_progress,
+        baseline_plan_progress: autoBaselinePlanProgress,
         variance_diff: evalData.variance_diff,
         status_flag: evalData.status_flag,
         summary_reasoning: evalData.summary_reasoning,
@@ -287,7 +302,28 @@ export const UploadView: React.FC<UploadViewProps> = ({
       };
 
       setEvaluationResult(record);
-      onEvaluationComplete(record);
+      setIsSubmitted(false);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการประเมินด้วย AI Vision');
+    } finally {
+      setIsAnalyzing(false);
+      setAnalysisStep('');
+    }
+  };
+
+  // 2. Submit to System (Button 2: ส่งเข้าระบบ เพื่อบันทึกผลงานและซิงก์ Google Sheets)
+  const handleSubmitToSystem = async () => {
+    if (!evaluationResult) return;
+    setIsSubmitting(true);
+    setErrorMsg('');
+
+    try {
+      onEvaluationComplete(evaluationResult);
+      setIsSubmitted(true);
+      setSubmitSuccessMsg(
+        `บันทึกและส่งรายงานโครงการ ${evaluationResult.branch_name} เข้าระบบเรียบร้อยแล้ว!`
+      );
 
       // Optional: Auto sync to Google Sheets if configured
       if (settings.autoSyncToSheets && settings.googleWebAppUrl) {
@@ -297,17 +333,24 @@ export const UploadView: React.FC<UploadViewProps> = ({
           body: JSON.stringify({
             webAppUrl: settings.googleWebAppUrl,
             action: 'addEvaluation',
-            payload: record,
+            payload: evaluationResult,
           }),
         }).catch((err) => console.error('Auto sync to sheet failed:', err));
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการประเมินด้วย AI Vision');
+      setErrorMsg(err.message || 'บันทึกข้อมูลเข้าระบบไม่สำเร็จ');
     } finally {
-      setIsAnalyzing(false);
-      setAnalysisStep('');
+      setIsSubmitting(false);
     }
+  };
+
+  const handleResetForm = () => {
+    setEvaluationResult(null);
+    setIsSubmitted(false);
+    setSubmitSuccessMsg('');
+    setErrorMsg('');
+    setPhotos({});
   };
 
   return (
@@ -480,10 +523,10 @@ export const UploadView: React.FC<UploadViewProps> = ({
             />
           </div>
 
-          {/* 1.6 วันที่อัปโหลดข้อมูล */}
+          {/* 1.6 วันที่อัปโหลดข้อมูล (Requirement 2.2) */}
           <div>
             <label className="block text-slate-300 font-medium mb-1">
-              1.6 วันที่อัปโหลดข้อมูล (YYYY-MM-DD) <span className="text-rose-400">*</span>
+              1.6 วันที่อัปโหลดข้อมูล (Upload Date) <span className="text-rose-400">*</span>
             </label>
             <input
               type="date"
@@ -493,10 +536,10 @@ export const UploadView: React.FC<UploadViewProps> = ({
             />
           </div>
 
-          {/* 1.7 วันที่ส่งมอบงาน */}
+          {/* 1.7 วันที่ส่งมอบงาน (Requirement 2.2) */}
           <div>
             <label className="block text-slate-300 font-medium mb-1">
-              1.7 วันที่ส่งมอบงาน (YYYY-MM-DD) <span className="text-rose-400">*</span>
+              1.7 วันที่ส่งมอบงาน (Delivery Date) <span className="text-rose-400">*</span>
             </label>
             <input
               type="date"
@@ -504,24 +547,6 @@ export const UploadView: React.FC<UploadViewProps> = ({
               onChange={(e) => setDeliveryDate(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-500"
             />
-          </div>
-
-          {/* ระยะเวลารวมของโครงการ (TotalWeeks) */}
-          <div>
-            <label className="block text-slate-300 font-medium mb-1">
-              ระยะเวลารวมโครงการ (Total Weeks) <span className="text-rose-400">*</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="4"
-                max="52"
-                value={totalWeeks}
-                onChange={(e) => setTotalWeeks(Math.max(4, Math.min(52, Number(e.target.value))))}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
-              />
-              <span className="text-slate-400 text-xs whitespace-nowrap">สัปดาห์</span>
-            </div>
           </div>
 
           {/* 1.8 พิกัดตำแหน่ง */}
@@ -570,46 +595,38 @@ export const UploadView: React.FC<UploadViewProps> = ({
             />
           </div>
 
-          {/* Baseline Plan Progress % */}
-          <div className="sm:col-span-2 lg:col-span-3 pt-2">
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-slate-300 font-medium">
-                แผนงานสะสมตามเป้าหมาย (Baseline Plan Progress %): <span className="text-cyan-400 font-mono font-bold">{baselinePlanProgress}%</span>
-              </label>
-              <span className="text-[11px] text-slate-400">สำหรับนำมาคำนวณส่วนต่าง Diff = Actual - Plan</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={baselinePlanProgress}
-              onChange={(e) => setBaselinePlanProgress(Number(e.target.value))}
-              className="w-full accent-cyan-500"
-            />
-          </div>
-
-          {/* Dynamic Project Timeline Calculation Banner (Requirement 5) */}
-          <div className="sm:col-span-2 lg:col-span-3 p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-800/80 space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-cyan-300">
+          {/* Dynamic Standard 10-Week Timeline Banner (Requirement 2.3 & 2.4 & 3) */}
+          <div className="sm:col-span-2 lg:col-span-3 p-4 rounded-xl bg-cyan-950/40 border border-cyan-800/80 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between text-xs font-semibold text-cyan-300 gap-2">
               <span className="flex items-center gap-1.5">
-                <span>⏱️</span>
-                <span>การคำนวณตารางเวลาโครงการและสัปดาห์อัตโนมัติ (Project Timeline):</span>
+                <Calendar className="w-4 h-4 text-cyan-400" />
+                <span>แผนงานมาตรฐานโครงการ 10 สัปดาห์ และเป้าสะสมอัตโนมัติ (Standard 10-Week S-Curve):</span>
               </span>
-              <span className="font-mono text-[11px] bg-cyan-900/60 px-2 py-0.5 rounded text-cyan-200">
-                สัปดาห์ปัจจุบัน: Week {calculatedCurrentWeek} / {totalWeeks}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] bg-cyan-900/80 border border-cyan-700 px-2.5 py-0.5 rounded-full text-cyan-200">
+                  สัปดาห์ประเมิน: Week {calculatedCurrentWeek} / 10
+                </span>
+                <span className="font-mono text-[11px] bg-emerald-950 border border-emerald-800 px-2.5 py-0.5 rounded-full text-emerald-300 font-bold">
+                  เป้าหมายแผนงานสะสม: {autoBaselinePlanProgress}%
+                </span>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-slate-300 pt-1">
-              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-[11px] text-slate-300 pt-1">
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">ระยะเวลามาตรฐาน:</span>
+                <strong className="text-cyan-300 font-mono">10 สัปดาห์ (70 วัน)</strong>
+              </div>
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-400 block text-[10px]">วันเริ่มงาน (Week 0):</span>
                 <strong className="text-slate-200 font-mono">{startDateFormatted || 'คำนวณอัตโนมัติ'}</strong>
               </div>
-              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
                 <span className="text-slate-400 block text-[10px]">วันที่อัปโหลดข้อมูลประเมิน:</span>
                 <strong className="text-cyan-300 font-mono">{uploadDate} (Week {calculatedCurrentWeek})</strong>
               </div>
-              <div className="bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                <span className="text-slate-400 block text-[10px]">วันส่งมอบงาน (Week {totalWeeks} ขวาสุด):</span>
+              <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-slate-400 block text-[10px]">วันส่งมอบงาน (Week 10 ขวาสุด):</span>
                 <strong className="text-emerald-300 font-mono">{deliveryDate} (เหลือ {daysRemaining} วัน)</strong>
               </div>
             </div>
@@ -624,12 +641,12 @@ export const UploadView: React.FC<UploadViewProps> = ({
           </div>
         )}
 
-        {/* Submit / Trigger Button */}
-        <div className="pt-3 flex flex-wrap items-center justify-between gap-4">
+        {/* BUTTON 1: RUN AI VISION EVALUATION (Requirement 2.1) */}
+        <div className="pt-3 flex flex-wrap items-center justify-between gap-4 border-t border-slate-800/80">
           <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <Info className="w-4 h-4 text-cyan-400" />
+            <Info className="w-4 h-4 text-cyan-400 shrink-0" />
             <span>
-              ระบบจะประเมินคะแนนความมั่นใจ (Confidence Score): หาก &ge; {settings.confidenceThreshold}% จะอนุมัติอัตโนมัติ หาก &lt; {settings.confidenceThreshold}% จะถูกส่งเข้าคิวรอการตรวจสอบ
+              <strong>ขั้นตอนที่ 1:</strong> กดปุ่มประเมินเพื่อวิเคราะห์ภาพถ่ายทั้ง 4 หมวดด้วย AI Vision และตรวจสอบผลก่อนส่งเข้าระบบ
             </span>
           </div>
 
@@ -639,7 +656,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
             className={`px-6 py-3 rounded-xl font-bold text-sm text-white shadow-xl transition-all flex items-center gap-2 ${
               isAnalyzing
                 ? 'bg-slate-700 cursor-not-allowed text-slate-400'
-                : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-cyan-600/30'
+                : 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-cyan-600/30 active:scale-[0.98]'
             }`}
           >
             {isAnalyzing ? (
@@ -670,9 +687,34 @@ export const UploadView: React.FC<UploadViewProps> = ({
         )}
       </div>
 
-      {/* EVALUATION RESULT REPORT CARD */}
+      {/* EVALUATION RESULT REPORT CARD (Requirement 2.1: Inspection Review & Separate Submit Button) */}
       {evaluationResult && (
         <div className="bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border-2 border-cyan-500/50 p-6 shadow-2xl space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          {/* Submission Notice Banner */}
+          {!isSubmitted ? (
+            <div className="p-3.5 rounded-xl bg-amber-950/70 border border-amber-700 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>AI Vision ประเมินผลเสร็จสิ้น:</strong> โปรดตรวจสอบความคืบหน้า คะแนน 4 หมวด และ Mascot ด้านล่าง เมื่อถูกต้องแล้วให้กดปุ่ม <strong>"กดส่งเข้าระบบ"</strong>
+                </span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900 text-amber-100 font-mono">
+                รอส่งเข้าระบบ (Draft Ready)
+              </span>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-700 text-emerald-200 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-semibold">{submitSuccessMsg || 'บันทึกและส่งรายงานเข้าระบบสำเร็จแล้ว!'}</span>
+              </div>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-900 text-emerald-200 border border-emerald-700 font-mono font-bold">
+                SUBMITTED TO SYSTEM
+              </span>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -689,8 +731,8 @@ export const UploadView: React.FC<UploadViewProps> = ({
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>
                     {evaluationResult.approval_status === 'APPROVED'
-                      ? 'อนุมัติอัตโนมัติ (Auto-Approved) เผยแพร่ทันที'
-                      : 'รอตรวจสอบในคิวอนุมัติ (Pending Supervisor Review)'}
+                      ? 'เกณฑ์ความมั่นใจผ่าน (Confidence ≥ 80%)'
+                      : 'ความมั่นใจ < 80% (รอ Supervisor ตรวจรับ)'}
                   </span>
                 </span>
               </div>
@@ -699,19 +741,47 @@ export const UploadView: React.FC<UploadViewProps> = ({
               </h3>
             </div>
 
-            <div className="flex items-center gap-3">
-              {canNavigateDashboard && onNavigateDashboard ? (
+            {/* BUTTON 2: SUBMIT TO SYSTEM (Requirement 2.1) */}
+            <div className="flex flex-wrap items-center gap-3">
+              {!isSubmitted ? (
                 <button
-                  onClick={onNavigateDashboard}
-                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5"
+                  onClick={handleSubmitToSystem}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-xl shadow-emerald-950/40 transition-all flex items-center gap-2 active:scale-95 animate-pulse"
                 >
-                  <span>ดูใน Dashboard และกราฟ S-Curve</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                      <span>กำลังบันทึกและส่งรายงาน...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 text-emerald-100" />
+                      <span>กดส่งเข้าระบบ (Submit to System)</span>
+                    </>
+                  )}
                 </button>
               ) : (
-                <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-medium flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>บันทึกผลงานสำเร็จ (ผู้รับเหมา)</span>
+                <div className="flex items-center gap-2">
+                  <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>ส่งรายงานเรียบร้อยแล้ว</span>
+                  </div>
+                  {canNavigateDashboard && onNavigateDashboard && (
+                    <button
+                      onClick={onNavigateDashboard}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-lg shadow-cyan-600/30 transition-all flex items-center gap-1.5"
+                    >
+                      <span>ดูใน Dashboard</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={handleResetForm}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-colors"
+                  >
+                    ประเมินสาขาใหม่
+                  </button>
                 </div>
               )}
             </div>
@@ -759,7 +829,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
                   <strong className="text-emerald-400 text-sm">{evaluationResult.calculated_actual_progress}%</strong>
                 </div>
                 <div className="text-slate-400 flex items-center gap-2 pt-1 border-t border-slate-800">
-                  <span>แผนงานสะสม: {evaluationResult.baseline_plan_progress}%</span>
+                  <span>แผนงานสะสมตาม S-Curve: <strong className="text-slate-200">{evaluationResult.baseline_plan_progress}%</strong></span>
                   <span>•</span>
                   <span>
                     ส่วนต่าง: <strong className={evaluationResult.variance_diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
@@ -788,3 +858,4 @@ export const UploadView: React.FC<UploadViewProps> = ({
     </div>
   );
 };
+

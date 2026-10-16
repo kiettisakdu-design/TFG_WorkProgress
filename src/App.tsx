@@ -7,7 +7,7 @@ import { ApprovalQueueView } from './components/ApprovalQueueView';
 import { SettingsView } from './components/SettingsView';
 import { GoogleSheetHub } from './components/GoogleSheetHub';
 import { EvaluationRecord, AppSettings, UserRole, UserAccount } from './types';
-import { INITIAL_EVALUATIONS } from './utils/sampleData';
+import { INITIAL_EVALUATIONS, DEFAULT_SCURVE_10_WEEKS } from './utils/sampleData';
 import {
   DEFAULT_GOOGLE_WEBAPP_URL,
   fetchEvaluationsFromSheets,
@@ -39,7 +39,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     rear: 15,
     parking: 15,
   },
-  sCurveWeeks: 12,
+  sCurveWeeks: 10,
+  sCurveBaselinePlan: DEFAULT_SCURVE_10_WEEKS,
   confidenceThreshold: 80,
   googleSheetId: '1lmqQ3y7IPv0zB3tH_QoyFebMlZxflhfJ8nIhTM3NscY',
   googleWebAppUrl: DEFAULT_GOOGLE_WEBAPP_URL,
@@ -75,7 +76,18 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          sCurveWeeks: 10, // Requirement 3: กำหนดระยะเวลามาตรฐานของทุกโครงการเป็น 10 week
+          sCurveBaselinePlan:
+            Array.isArray(parsed.sCurveBaselinePlan) && parsed.sCurveBaselinePlan.length === 11
+              ? parsed.sCurveBaselinePlan
+              : DEFAULT_SCURVE_10_WEEKS,
+        };
+      }
     } catch (e) {
       console.error(e);
     }

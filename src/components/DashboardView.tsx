@@ -34,11 +34,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
   const [selectedProvince, setSelectedProvince] = useState<string>('ALL');
   const [selectedContractor, setSelectedContractor] = useState<string>('ALL');
+  const [selectedUploadDate, setSelectedUploadDate] = useState<string>('ALL');
 
   // Selected Active Evaluation for Deep Inspection
   const [activeEvalId, setActiveEvalId] = useState<string>(evaluations[0]?.id || '');
 
-  // Extract unique branches, provinces, contractors from current evaluations
+  // Extract unique branches, provinces, contractors, and upload dates from current evaluations
   const branchOptions = useMemo(() => {
     return Array.from(new Set(evaluations.map((e) => e.branch_name)));
   }, [evaluations]);
@@ -51,15 +52,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return Array.from(new Set(evaluations.map((e) => e.contractor)));
   }, [evaluations]);
 
+  // Requirement 1: Unique Upload Dates for filtering
+  const uploadDateOptions = useMemo(() => {
+    return Array.from(new Set(evaluations.map((e) => e.evaluated_date))).sort().reverse();
+  }, [evaluations]);
+
   // Filtered evaluations
   const filteredEvaluations = useMemo(() => {
     return evaluations.filter((e) => {
       const matchBranch = selectedBranch === 'ALL' || e.branch_name === selectedBranch;
       const matchProvince = selectedProvince === 'ALL' || e.province === selectedProvince;
       const matchContractor = selectedContractor === 'ALL' || e.contractor === selectedContractor;
-      return matchBranch && matchProvince && matchContractor;
+      const matchUploadDate = selectedUploadDate === 'ALL' || e.evaluated_date === selectedUploadDate;
+      return matchBranch && matchProvince && matchContractor && matchUploadDate;
     });
-  }, [evaluations, selectedBranch, selectedProvince, selectedContractor]);
+  }, [evaluations, selectedBranch, selectedProvince, selectedContractor, selectedUploadDate]);
 
   // Current active evaluation record
   const currentRecord = useMemo(() => {
@@ -67,17 +74,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return found || filteredEvaluations[0] || evaluations[0];
   }, [filteredEvaluations, activeEvalId, evaluations]);
 
-  // Dynamic S-Curve dataset for current record
+  // Dynamic S-Curve dataset for current record using 10-week standard and Admin baseline plan
   const sCurveData = useMemo(() => {
     if (!currentRecord) return [];
     return generateSCurveData(
-      currentRecord.total_weeks || settings.sCurveWeeks || 12,
+      currentRecord.total_weeks || settings.sCurveWeeks || 10,
       currentRecord.calculated_actual_progress,
       currentRecord.baseline_plan_progress,
       currentRecord.evaluated_date,
-      currentRecord.delivery_date
+      currentRecord.delivery_date,
+      settings.sCurveBaselinePlan
     );
-  }, [currentRecord, settings.sCurveWeeks]);
+  }, [currentRecord, settings.sCurveWeeks, settings.sCurveBaselinePlan]);
 
   // Days remaining calculation
   const daysRemaining = useMemo(() => {
@@ -90,7 +98,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 1. FILTER BAR (Specification 5.1: สามารถกรองข้อมูลตาม สาขา, จังหวัด, และ ผู้รับเหมา ได้) */}
+      {/* 1. FILTER BAR (Specification 5.1 & User Request 1: กรองข้อมูลตาม สาขา, จังหวัด, ผู้รับเหมา, และวันที่อัปโหลดข้อมูล) */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-lg backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-slate-200 text-sm font-semibold">
@@ -101,9 +109,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 flex-1 justify-end">
+            {/* 1. Filter วันที่อัปโหลดข้อมูล (User Request 1) */}
+            <div className="flex items-center gap-1.5 min-w-[170px]">
+              <label className="text-xs text-slate-400 whitespace-nowrap flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                <span>วันที่อัปโหลด:</span>
+              </label>
+              <select
+                value={selectedUploadDate}
+                onChange={(e) => setSelectedUploadDate(e.target.value)}
+                className="w-full text-xs bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-cyan-300 focus:outline-none focus:border-cyan-500 font-mono"
+              >
+                <option value="ALL">ทุกวันที่ ({uploadDateOptions.length})</option>
+                {uploadDateOptions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Branch Filter */}
             <div className="flex items-center gap-1.5 min-w-[160px]">
-              <label className="text-xs text-slate-400">สาขา:</label>
+              <label className="text-xs text-slate-400 whitespace-nowrap">สาขา:</label>
               <select
                 value={selectedBranch}
                 onChange={(e) => {
@@ -126,7 +154,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Province Filter */}
             <div className="flex items-center gap-1.5 min-w-[140px]">
-              <label className="text-xs text-slate-400">จังหวัด:</label>
+              <label className="text-xs text-slate-400 whitespace-nowrap">จังหวัด:</label>
               <select
                 value={selectedProvince}
                 onChange={(e) => setSelectedProvince(e.target.value)}
@@ -143,7 +171,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
             {/* Contractor Filter */}
             <div className="flex items-center gap-1.5 min-w-[170px]">
-              <label className="text-xs text-slate-400">ผู้รับเหมา:</label>
+              <label className="text-xs text-slate-400 whitespace-nowrap">ผู้รับเหมา:</label>
               <select
                 value={selectedContractor}
                 onChange={(e) => setSelectedContractor(e.target.value)}
@@ -159,14 +187,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Clear Filter */}
-            {(selectedBranch !== 'ALL' || selectedProvince !== 'ALL' || selectedContractor !== 'ALL') && (
+            {(selectedBranch !== 'ALL' ||
+              selectedProvince !== 'ALL' ||
+              selectedContractor !== 'ALL' ||
+              selectedUploadDate !== 'ALL') && (
               <button
                 onClick={() => {
                   setSelectedBranch('ALL');
                   setSelectedProvince('ALL');
                   setSelectedContractor('ALL');
+                  setSelectedUploadDate('ALL');
                 }}
-                className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors"
+                className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors whitespace-nowrap"
               >
                 ล้างตัวกรอง
               </button>

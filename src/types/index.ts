@@ -84,7 +84,8 @@ export interface SCurveWeekPoint {
 
 export interface AppSettings {
   weights: PhotoCategoryWeights;
-  sCurveWeeks: number; // 4 - 52 (default 12)
+  sCurveWeeks: number; // standard 10 weeks
+  sCurveBaselinePlan?: number[]; // Baseline % for Week 0 to Week 10 [0, 5, 12, 22, 35, 50, 65, 78, 88, 95, 100]
   confidenceThreshold: number; // default 80%
   googleSheetId: string;
   googleWebAppUrl: string;

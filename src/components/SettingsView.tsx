@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { AppSettings, PhotoCategoryWeights, UserAccount, UserRole } from '../types';
 import {
+  DEFAULT_SCURVE_10_WEEKS,
+  SCURVE_WEEK_DESCRIPTIONS,
+} from '../utils/sampleData';
+import {
   Settings,
   Sliders,
   Calendar,
@@ -22,6 +26,9 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
+  TrendingUp,
+  BarChart3,
+  Wrench,
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -55,7 +62,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onDeleteUser,
 }) => {
   const [weights, setWeights] = useState<PhotoCategoryWeights>({ ...settings.weights });
-  const [sCurveWeeks, setSCurveWeeks] = useState<number>(settings.sCurveWeeks);
+  // Standard duration: fixed 10 weeks across all projects as per requirement 3
+  const [sCurveWeeks] = useState<number>(10);
+  const [sCurveBaselinePlan, setSCurveBaselinePlan] = useState<number[]>(() => {
+    if (Array.isArray(settings.sCurveBaselinePlan) && settings.sCurveBaselinePlan.length === 11) {
+      return [...settings.sCurveBaselinePlan];
+    }
+    return [...DEFAULT_SCURVE_10_WEEKS];
+  });
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(settings.confidenceThreshold);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [roleChangeNotice, setRoleChangeNotice] = useState<string>('');
@@ -116,8 +130,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleResetDefaults = () => {
     setWeights({ front: 30, interior: 40, rear: 15, parking: 15 });
-    setSCurveWeeks(12);
+    setSCurveBaselinePlan([...DEFAULT_SCURVE_10_WEEKS]);
     setConfidenceThreshold(80);
+  };
+
+  const handleWeekBaselineChange = (weekIndex: number, rawVal: number) => {
+    const val = Math.max(0, Math.min(100, isNaN(rawVal) ? 0 : rawVal));
+    setSCurveBaselinePlan((prev) => {
+      const next = [...prev];
+      next[weekIndex] = val;
+      return next;
+    });
+  };
+
+  // Auto calculate standard smooth Sigmoid curve
+  const handleAutoSigmoid = () => {
+    const next = [0];
+    for (let w = 1; w <= 10; w++) {
+      if (w === 10) {
+        next.push(100);
+      } else {
+        const t = w / 10;
+        const raw = 1 / (1 + Math.exp(-6 * (t - 0.5)));
+        const s0 = 1 / (1 + Math.exp(-6 * (0 - 0.5)));
+        const s1 = 1 / (1 + Math.exp(-6 * (1 - 0.5)));
+        const norm = (raw - s0) / (s1 - s0);
+        next.push(Math.round(norm * 100));
+      }
+    }
+    setSCurveBaselinePlan(next);
+  };
+
+  // Linear progression
+  const handleLinearBaseline = () => {
+    setSCurveBaselinePlan([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]);
+  };
+
+  // Reset S-Curve table to standard default
+  const handleResetScurveDefault = () => {
+    setSCurveBaselinePlan([...DEFAULT_SCURVE_10_WEEKS]);
   };
 
   const handleSave = () => {
@@ -125,7 +176,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     onSaveSettings({
       ...settings,
       weights,
-      sCurveWeeks,
+      sCurveWeeks: 10,
+      sCurveBaselinePlan,
       confidenceThreshold,
     });
     setSaveSuccess(true);
@@ -554,69 +606,245 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* SECTION 3: S-CURVE & CONFIDENCE THRESHOLD */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* S-Curve Weeks Slider */}
-        <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <Calendar className="w-5 h-5 text-cyan-400" />
+      {/* SECTION 3: 10-WEEK STANDARD S-CURVE BASELINE SETTING (User Request 3) */}
+      <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 shadow-xl space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-cyan-950 text-cyan-400 border border-cyan-800 shadow-md">
+              <TrendingUp className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="font-semibold text-slate-100 text-sm">
-                3. จำนวนสัปดาห์บนแกน S-Curve
-              </h3>
-              <p className="text-[11px] text-slate-400">กำหนดระยะเวลาโครงการมาตรฐาน</p>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-slate-100 text-sm">
+                  3. กำหนดระยะเวลามาตรฐาน 10 สัปดาห์ และค่าความคืบหน้าสะสม S-Curve (10-Week S-Curve Baseline)
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono font-bold">
+                  STANDARD 10 WEEKS
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                กำหนดระยะเวลามาตรฐานของทุกโครงการเป็น 10 สัปดาห์ และสามารถกรอกค่าเป้าหมายความคืบหน้าสะสม (%) ของแต่ละสัปดาห์ได้โดยตรง
+              </p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-300">ระยะเวลาโครงการทั้งหมด:</span>
-              <span className="text-cyan-400 font-mono font-bold text-base">{sCurveWeeks} สัปดาห์</span>
-            </div>
-            <input
-              type="range"
-              min="4"
-              max="52"
-              value={sCurveWeeks}
-              onChange={(e) => setSCurveWeeks(Number(e.target.value))}
-              className="w-full accent-cyan-500"
-            />
-            <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-              <span>4 สัปดาห์ (1 เดือน)</span>
-              <span>12 สัปดาห์ (3 เดือน)</span>
-              <span>52 สัปดาห์ (1 ปี)</span>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleAutoSigmoid}
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 flex items-center gap-1.5 transition-colors"
+              title="คำนวณโค้ง S-Curve แบบ Sigmoid เรียบเนียน"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>คำนวณ Sigmoid S-Curve</span>
+            </button>
+            <button
+              onClick={handleLinearBaseline}
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition-colors"
+              title="เพิ่มขึ้นสัปดาห์ละ 10% สม่ำเสมอ"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>เกลี่ยเชิงเส้น (Linear +10%)</span>
+            </button>
+            <button
+              onClick={handleResetScurveDefault}
+              className="text-xs px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition-colors"
+              title="คืนค่ามาตรฐาน 10 สัปดาห์ของ Shop TFM"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>คืนค่าเริ่มต้น 10 WEEKS</span>
+            </button>
           </div>
         </div>
 
-        {/* Confidence Threshold Slider */}
-        <div className="bg-slate-900/90 rounded-3xl border border-slate-800 p-6 shadow-xl space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <ShieldCheck className="w-5 h-5 text-cyan-400" />
-            <div>
-              <h3 className="font-semibold text-slate-100 text-sm">
-                4. เกณฑ์ AI Confidence Threshold
-              </h3>
-              <p className="text-[11px] text-slate-400">ตัดเข้าคิวอนุมัติอัตโนมัติ</p>
+        {/* Live Mini S-Curve SVG Chart Preview */}
+        <div className="bg-slate-950/80 rounded-2xl border border-slate-800/80 p-4 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 font-medium text-slate-300">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span>พรีวิวเส้นกราฟแผนงานสะสม S-Curve (Week 0 ➔ Week 10 วันส่งมอบงาน)</span>
+            </div>
+            <div className="text-[11px] font-mono text-cyan-300">
+              Week 0: 0% ➔ Week 10: {sCurveBaselinePlan[10] || 100}%
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-300">เกณฑ์ความมั่นใจขั้นต่ำ:</span>
-              <span className="text-cyan-400 font-mono font-bold text-base">{confidenceThreshold}%</span>
+          <div className="h-32 w-full relative">
+            <svg viewBox="0 0 500 100" className="w-full h-full select-none" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="settingsScurveGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Grid lines */}
+              {[0, 25, 50, 75, 100].map((val) => {
+                const y = 90 - (val / 100) * 80;
+                return (
+                  <line
+                    key={val}
+                    x1="25"
+                    y1={y}
+                    x2="485"
+                    y2={y}
+                    stroke="#1e293b"
+                    strokeWidth="1"
+                    strokeDasharray="3 3"
+                  />
+                );
+              })}
+
+              {/* SVG Path */}
+              {(() => {
+                const points = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((w) => {
+                  const x = 30 + (w / 10) * 440;
+                  const val = sCurveBaselinePlan[w] !== undefined ? sCurveBaselinePlan[w] : (w === 0 ? 0 : w * 10);
+                  const y = 90 - (Math.max(0, Math.min(100, val)) / 100) * 80;
+                  return { x, y, val, w };
+                });
+
+                const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                const areaD = `${pathD} L ${points[10].x} 90 L ${points[0].x} 90 Z`;
+
+                return (
+                  <>
+                    <path d={areaD} fill="url(#settingsScurveGrad)" />
+                    <path d={pathD} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" />
+                    {points.map((p) => (
+                      <g key={p.w}>
+                        <circle
+                          cx={p.x}
+                          cy={p.y}
+                          r={p.w === 0 || p.w === 10 ? 4 : 3}
+                          fill={p.w === 10 ? '#10b981' : '#06b6d4'}
+                          stroke="#0f172a"
+                          strokeWidth="1.5"
+                        />
+                        <text
+                          x={p.x}
+                          y={p.y - 7}
+                          fill="#94a3b8"
+                          fontSize="9"
+                          fontFamily="monospace"
+                          textAnchor="middle"
+                        >
+                          {p.val}%
+                        </text>
+                        <text
+                          x={p.x}
+                          y={98}
+                          fill="#64748b"
+                          fontSize="8"
+                          fontFamily="sans-serif"
+                          textAnchor="middle"
+                        >
+                          W{p.w}
+                        </text>
+                      </g>
+                    ))}
+                  </>
+                );
+              })()}
+            </svg>
+          </div>
+        </div>
+
+        {/* 10-Week Input Grid (Editable Table) */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-300 font-semibold px-1">
+            <span>ตารางกรอกค่าความคืบหน้าสะสม S-Curve แต่ละสัปดาห์ (Week 1 ถึง Week 10):</span>
+            <span className="text-[11px] text-slate-400 font-normal">
+              * Week 0 ถูกล็อกไว้ที่ 0% อัตโนมัติ (วันเริ่มโครงการ)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((week) => {
+              const currentVal = sCurveBaselinePlan[week] !== undefined ? sCurveBaselinePlan[week] : week * 10;
+              const prevVal = week === 1 ? (sCurveBaselinePlan[0] || 0) : (sCurveBaselinePlan[week - 1] || 0);
+              const increment = currentVal - prevVal;
+              const descObj = SCURVE_WEEK_DESCRIPTIONS.find((d) => d.week === week);
+
+              return (
+                <div
+                  key={week}
+                  className={`p-3 rounded-2xl border transition-all ${
+                    week === 10
+                      ? 'bg-emerald-950/30 border-emerald-800/80 ring-1 ring-emerald-500/30'
+                      : 'bg-slate-950/70 border-slate-800/80 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-800/60">
+                    <span className="text-xs font-bold text-white font-mono flex items-center gap-1">
+                      <span>Week {week}</span>
+                      {week === 10 && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-900 text-emerald-300">
+                          ส่งมอบ
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`text-[10px] font-mono font-semibold ${
+                        increment >= 0 ? 'text-cyan-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {increment >= 0 ? `+${increment}%` : `${increment}%`}
+                    </span>
+                  </div>
+
+                  {/* Stage description */}
+                  <div className="py-2 text-[10.5px] text-slate-400 h-10 overflow-hidden leading-tight line-clamp-2">
+                    {descObj?.title || `ระยะงานสัปดาห์ที่ ${week}`}
+                  </div>
+
+                  {/* Input field */}
+                  <div className="pt-1 flex items-center gap-1.5">
+                    <label className="text-[10px] text-slate-400">เป้าสะสม:</label>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={currentVal}
+                        onChange={(e) => handleWeekBaselineChange(week, parseFloat(e.target.value))}
+                        className="w-full text-center text-xs font-mono font-bold bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-cyan-300 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                      />
+                    </div>
+                    <span className="text-xs font-mono font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Confidence Threshold Section integrated */}
+        <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            <div>
+              <h4 className="font-semibold text-slate-200 text-xs">
+                เกณฑ์ AI Confidence Threshold ในการอนุมัติอัตโนมัติ:
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                หาก AI ประเมินได้ความมั่นใจ &ge; {confidenceThreshold}% จะอนุมัติและเผยแพร่อัตโนมัติ (หากน้อยกว่าจะส่งเข้า Approval Queue)
+              </p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3">
             <input
               type="range"
               min="50"
               max="95"
               value={confidenceThreshold}
               onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-              className="w-full accent-cyan-500"
+              className="w-40 accent-cyan-500"
             />
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              หาก AI ประเมินได้คะแนน &ge; {confidenceThreshold}% ระบบจะเผยแพร่ผลทันที หาก &lt; {confidenceThreshold}% จะถูกส่งเข้า Approval Queue
-            </p>
+            <span className="text-sm font-mono font-bold text-cyan-400 min-w-[45px] text-right">
+              {confidenceThreshold}%
+            </span>
           </div>
         </div>
       </div>
@@ -628,7 +856,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           className="text-xs px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1.5"
         >
           <RotateCcw className="w-3.5 h-3.5" />
-          <span>คืนค่าเริ่มต้นตามสเปก (30/40/15/15, 12 สัปดาห์, 80%)</span>
+          <span>คืนค่าเริ่มต้นตามสเปก (30/40/15/15, 10 สัปดาห์มาตรฐาน, 80%)</span>
         </button>
 
         <div className="flex items-center gap-3">
