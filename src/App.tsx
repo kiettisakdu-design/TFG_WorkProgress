@@ -24,13 +24,15 @@ import {
   deleteUserAccount,
 } from './utils/auth';
 import {
+  safeLoadEvaluations,
+  safeSaveEvaluations,
+  STORAGE_KEY_SETTINGS,
+} from './utils/safeStorage';
+import {
   Building2,
   CheckCircle2,
   Info,
 } from 'lucide-react';
-
-const STORAGE_KEY_EVALUATIONS = 'shop_tfm_evaluations_v2';
-const STORAGE_KEY_SETTINGS = 'shop_tfm_settings_v2';
 
 const DEFAULT_SETTINGS: AppSettings = {
   weights: {
@@ -61,15 +63,9 @@ export default function App() {
   // Effective role derived from currentUser (or fallback 'CONTRACTOR')
   const currentRole: UserRole = currentUser ? currentUser.role : 'CONTRACTOR';
 
-  // Evaluations state (persisted)
+  // Evaluations state (persisted safely without quota exceeded errors)
   const [evaluations, setEvaluations] = useState<EvaluationRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_EVALUATIONS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error(e);
-    }
-    return INITIAL_EVALUATIONS;
+    return safeLoadEvaluations(INITIAL_EVALUATIONS);
   });
 
   // Settings state (persisted)
@@ -222,20 +218,17 @@ export default function App() {
     fetchFromGoogleSheet(false);
   }, []);
 
-  // Sync to local storage
+  // Sync evaluations to local storage safely (protects against QuotaExceededError)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_EVALUATIONS, JSON.stringify(evaluations));
-    } catch (e) {
-      console.error(e);
-    }
+    safeSaveEvaluations(evaluations);
   }, [evaluations]);
 
+  // Sync settings to local storage safely
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
     } catch (e) {
-      console.error(e);
+      console.warn('Could not save settings to localStorage:', e);
     }
   }, [settings]);
 

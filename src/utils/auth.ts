@@ -54,8 +54,12 @@ export function getStoredUsers(): UserAccount[] {
   } catch (err) {
     console.error('Failed to load stored users:', err);
   }
-  // Initialize default users
-  localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(DEFAULT_USERS));
+  // Initialize default users safely
+  try {
+    localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(DEFAULT_USERS));
+  } catch (err) {
+    console.warn('Could not cache default users in localStorage:', err);
+  }
   return DEFAULT_USERS;
 }
 
